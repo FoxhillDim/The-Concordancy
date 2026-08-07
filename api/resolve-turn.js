@@ -54,9 +54,11 @@ export async function POST(request) {
     `[resolve-turn] body parsed at +${Date.now() - t0}ms — model=${model} systemLen=${system.length} promptLen=${userPrompt.length}`
   );
 
-  // Internal fail-fast timeout: abort our own upstream call well before
-  // Vercel's 60s hard ceiling, so a genuine hang produces a fast, specific,
-  // diagnosable error instead of a generic platform 504 with no detail.
+  // Internal fail-fast timeout: this used to be much tighter (25s) purely
+  // as a debugging aid while hunting an earlier bug. Now that requests
+  // complete normally, a short internal ceiling does more harm than good —
+  // it kills legitimately slower (but fine) turns before Vercel's own real
+  // 60s limit would. Set it just under maxDuration instead.
   const upstreamController = new AbortController();
   const upstreamTimeout = setTimeout(() => upstreamController.abort(), 55000);
 
@@ -76,6 +78,14 @@ export async function POST(request) {
         max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: userPrompt }],
+        // Sonnet 5 runs adaptive thinking ON BY DEFAULT (a behavior change
+        // from Sonnet 4.6, where thinking was opt-in). Left uncontrolled,
+        // it will reason very deeply — and expensively, and slowly — on
+        // genuinely novel/hard turns (e.g. an unprecedented player action).
+        // "medium" caps that runaway case while preserving good reasoning
+        // quality on normal turns. Tune to "low" for cheaper/faster at the
+        // cost of some nuance, or "high"/"max" for the opposite trade-off.
+        output_config: { effort: "medium" },
       }),
     });
     console.log(`[resolve-turn] Anthropic responded status=${upstream.status} at +${Date.now() - t0}ms`);
@@ -83,7 +93,7 @@ export async function POST(request) {
     clearTimeout(upstreamTimeout);
     const isTimeout = e.name === "AbortError";
     console.error(
-      `[resolve-turn] upstream call failed at +${Date.now() - t0}ms: ${isTimeout ? "internal 25s timeout fired" : e.message}`
+      `[resolve-turn] upstream call failed at +${Date.now() - t0}ms: ${isTimeout ? "internal 55s timeout fired" : e.message}`
     );
     return new Response(
       JSON.stringify({
