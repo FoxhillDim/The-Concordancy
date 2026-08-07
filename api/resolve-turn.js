@@ -42,7 +42,7 @@ export async function POST(request) {
     });
   }
 
-  const { system, userPrompt, model = "claude-sonnet-5", maxTokens = 1000 } = body || {};
+  const { system, userPrompt, model = "claude-sonnet-5", maxTokens = 8000 } = body || {};
   if (!system || !userPrompt) {
     return new Response(JSON.stringify({ error: { message: "Missing system or userPrompt" } }), {
       status: 400,
