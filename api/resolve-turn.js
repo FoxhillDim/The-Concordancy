@@ -12,7 +12,7 @@
 // than failing the deployment.
 export const maxDuration = 60;
 
-export default async function handler(request) {
+export async function POST(request) {
   const t0 = Date.now();
   console.log("[resolve-turn] invocation start");
 
