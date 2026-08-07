@@ -58,7 +58,7 @@ export async function POST(request) {
   // Vercel's 60s hard ceiling, so a genuine hang produces a fast, specific,
   // diagnosable error instead of a generic platform 504 with no detail.
   const upstreamController = new AbortController();
-  const upstreamTimeout = setTimeout(() => upstreamController.abort(), 25000);
+  const upstreamTimeout = setTimeout(() => upstreamController.abort(), 55000);
 
   let upstream;
   try {
@@ -89,7 +89,7 @@ export async function POST(request) {
       JSON.stringify({
         error: {
           message: isTimeout
-            ? "Anthropic did not respond within 25s (internal diagnostic timeout — this is not the usual behavior)"
+            ? "Anthropic took longer than 55s to respond — this can happen on complex turns. Hit Retry."
             : `Upstream request failed: ${e.message}`,
         },
       }),
