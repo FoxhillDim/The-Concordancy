@@ -42,7 +42,7 @@ async function safeReadJson(response) {
 // sees the key. Returns the raw model text. Throws HttpError / ApiError /
 // EmptyContentError on any failure — callers should catch these and route
 // to the existing simulation error UI without exposing the raw error/stack.
-export async function callModel({ system, userPrompt, signal, model = "claude-sonnet-5", maxTokens = 1000, fetchImpl = fetch, endpoint = "/api/resolve-turn" }) {
+export async function callModel({ system, userPrompt, signal, model = "claude-sonnet-5", maxTokens = 8000, fetchImpl = fetch, endpoint = "/api/resolve-turn" }) {
   const response = await fetchImpl(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
