@@ -13,6 +13,9 @@
 export const maxDuration = 60;
 
 export default async function handler(request) {
+  const t0 = Date.now();
+  console.log("[resolve-turn] invocation start");
+
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: { message: "Method not allowed" } }), {
       status: 405,
@@ -22,6 +25,7 @@ export default async function handler(request) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
+    console.error("[resolve-turn] ANTHROPIC_API_KEY is not set");
     return new Response(
       JSON.stringify({ error: { message: "Server misconfigured: ANTHROPIC_API_KEY is not set" } }),
       { status: 500, headers: { "Content-Type": "application/json" } }
@@ -46,8 +50,19 @@ export default async function handler(request) {
     });
   }
 
+  console.log(
+    `[resolve-turn] body parsed at +${Date.now() - t0}ms — model=${model} systemLen=${system.length} promptLen=${userPrompt.length}`
+  );
+
+  // Internal fail-fast timeout: abort our own upstream call well before
+  // Vercel's 60s hard ceiling, so a genuine hang produces a fast, specific,
+  // diagnosable error instead of a generic platform 504 with no detail.
+  const upstreamController = new AbortController();
+  const upstreamTimeout = setTimeout(() => upstreamController.abort(), 25000);
+
   let upstream;
   try {
+    console.log(`[resolve-turn] calling Anthropic at +${Date.now() - t0}ms`);
     upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -55,6 +70,7 @@ export default async function handler(request) {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
+      signal: upstreamController.signal,
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
@@ -62,17 +78,31 @@ export default async function handler(request) {
         messages: [{ role: "user", content: userPrompt }],
       }),
     });
+    console.log(`[resolve-turn] Anthropic responded status=${upstream.status} at +${Date.now() - t0}ms`);
   } catch (e) {
-    return new Response(JSON.stringify({ error: { message: `Upstream request failed: ${e.message}` } }), {
-      status: 502,
-      headers: { "Content-Type": "application/json" },
-    });
+    clearTimeout(upstreamTimeout);
+    const isTimeout = e.name === "AbortError";
+    console.error(
+      `[resolve-turn] upstream call failed at +${Date.now() - t0}ms: ${isTimeout ? "internal 25s timeout fired" : e.message}`
+    );
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: isTimeout
+            ? "Anthropic did not respond within 25s (internal diagnostic timeout — this is not the usual behavior)"
+            : `Upstream request failed: ${e.message}`,
+        },
+      }),
+      { status: 502, headers: { "Content-Type": "application/json" } }
+    );
   }
+  clearTimeout(upstreamTimeout);
 
   // Pass the Anthropic response straight through — status code and body —
   // so the existing client-side error handling (HttpError/ApiError/
   // EmptyContentError) keeps working unchanged.
   const text = await upstream.text();
+  console.log(`[resolve-turn] read upstream body (${text.length} chars) at +${Date.now() - t0}ms — returning`);
   return new Response(text, {
     status: upstream.status,
     headers: { "Content-Type": "application/json" },
