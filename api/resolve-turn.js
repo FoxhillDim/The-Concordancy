@@ -4,6 +4,14 @@
 // This holds ANTHROPIC_API_KEY as a server-side environment variable —
 // it is never sent to, or visible from, the browser. The client only ever
 // talks to this same-origin endpoint.
+//
+// maxDuration: the default function timeout is too short for a full
+// structured-JSON turn generation, especially on a cold start. This
+// requests the maximum Vercel allows on the current plan — if the plan
+// caps lower than 60s, Vercel silently applies its own ceiling rather
+// than failing the deployment.
+export const maxDuration = 60;
+
 export default async function handler(request) {
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: { message: "Method not allowed" } }), {
