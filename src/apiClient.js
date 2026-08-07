@@ -42,13 +42,45 @@ async function safeReadJson(response) {
 // sees the key. Returns the raw model text. Throws HttpError / ApiError /
 // EmptyContentError on any failure — callers should catch these and route
 // to the existing simulation error UI without exposing the raw error/stack.
-export async function callModel({ system, userPrompt, signal, model = "claude-sonnet-5", maxTokens = 8000, fetchImpl = fetch, endpoint = "/api/resolve-turn" }) {
-  const response = await fetchImpl(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal,
-    body: JSON.stringify({ system, userPrompt, model, maxTokens }),
-  });
+//
+// timeoutMs: this fetch previously had NO client-side ceiling at all — if
+// the network dropped mid-request, the promise could hang forever with no
+// error and no way to recover except a manual page refresh. This wraps the
+// external `signal` (used for user-initiated Reset) together with our own
+// internal timer, and — critically — distinguishes the two: a user Reset
+// stays silent (existing behavior via AbortError), but our OWN timeout
+// firing is re-thrown as a visible HttpError instead of a silent abort, so
+// a real network hang produces a clear message rather than nothing at all.
+export async function callModel({ system, userPrompt, signal, model = "claude-sonnet-5", maxTokens = 8000, fetchImpl = fetch, endpoint = "/api/resolve-turn", timeoutMs = 90000 }) {
+  const internalController = new AbortController();
+  let timedOut = false;
+  const forwardExternalAbort = () => internalController.abort();
+  if (signal) {
+    if (signal.aborted) internalController.abort();
+    else signal.addEventListener("abort", forwardExternalAbort);
+  }
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    internalController.abort();
+  }, timeoutMs);
+
+  let response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: internalController.signal,
+      body: JSON.stringify({ system, userPrompt, model, maxTokens }),
+    });
+  } catch (e) {
+    if (e && e.name === "AbortError" && timedOut) {
+      throw new HttpError(0, `No response after ${Math.round(timeoutMs / 1000)}s — check your connection and try again`);
+    }
+    throw e; // genuine user-initiated Reset abort, or another network error
+  } finally {
+    clearTimeout(timeoutId);
+    if (signal) signal.removeEventListener("abort", forwardExternalAbort);
+  }
 
   const parsed = await safeReadJson(response);
 
@@ -78,6 +110,9 @@ export async function callModel({ system, userPrompt, signal, model = "claude-so
   if (text.length === 0) {
     throw new EmptyContentError("all content blocks were empty");
   }
+
+  return text;
+}
 
   return text;
 }
