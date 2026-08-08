@@ -80,7 +80,15 @@ export const DEFAULT_PHIL = [
 ];
 
 export const STARTING_YEAR = 2026;
-export const STARTING_CLOCK = 130;
+// Doomsday Clock is on a literal minutes-to-midnight scale now: 0 (midnight)
+// to MAX_CLOCK (safest). CLOCK_SPLIT is where the two-ring gauge divides —
+// the inner ring covers 0..CLOCK_SPLIT (the "final hour," yellow), the
+// outer ring covers CLOCK_SPLIT..MAX_CLOCK (green). The outer ring drains
+// first as danger rises; only once it's empty does the inner ring begin
+// draining toward true midnight.
+export const MAX_CLOCK = 120;
+export const CLOCK_SPLIT = 60;
+export const STARTING_CLOCK = 90;
 
 export const INTRO_ENTRY = {
   year: STARTING_YEAR,
@@ -102,11 +110,23 @@ export function valueColor(val, invert) {
   return hot ? "text-emerald-400" : mid ? "text-amber-300" : "text-rose-400";
 }
 
-export function clockColor(seconds) {
-  if (seconds <= 20) return "#ff3b3b";
-  if (seconds <= 60) return "#ffb020";
-  if (seconds <= 100) return "#5ee1ff";
-  return "#4af6c3";
+// Fixed two-tone Doomsday Clock ring scheme (replaces the old single-ring,
+// 4-tier gradient) — outer ring = green ("an hour or more away"), inner
+// ring = yellow ("the end is becoming near"). No value-dependent color
+// shifting, by design — kept intentionally simple for now.
+export const CLOCK_OUTER_COLOR = "#4af6c3";
+export const CLOCK_INNER_COLOR = "#ffb020";
+export const CLOCK_TRACK_COLOR = "#1c2530";
+
+// Pure, testable ring-fill math for the two-ring gauge. The outer ring
+// (CLOCK_SPLIT..MAX_CLOCK) drains first as danger rises; only once it's
+// empty does the inner ring (0..CLOCK_SPLIT) begin draining toward true
+// midnight. Returns fractions in [0, 1] for each ring.
+export function clockRingFractions(minutes) {
+  const clamped = Math.max(0, Math.min(MAX_CLOCK, minutes));
+  const outer = Math.max(0, Math.min(1, (clamped - CLOCK_SPLIT) / CLOCK_SPLIT));
+  const inner = Math.max(0, Math.min(1, clamped / CLOCK_SPLIT));
+  return { outer, inner };
 }
 
 // Pure mapping used by the <TrendArrow/> component. Unknown/missing values
@@ -320,8 +340,8 @@ export function validateTurnPayload(payload, expectedYear) {
   if (!isNonEmptyString(payload.nt)) errors.push("nt (note): must not be blank");
   if (typeof payload.fl !== "string") errors.push("fl (flag): must be a string (may be empty)");
 
-  if (!isFiniteInt(payload.ck) || payload.ck < 0 || payload.ck > 180) {
-    errors.push(`ck (clock): must be an integer 0-180, got ${JSON.stringify(payload.ck)}`);
+if (!isFiniteInt(payload.ck) || payload.ck < 0 || payload.ck > MAX_CLOCK) {
+    errors.push(`ck (clock): must be an integer 0-${MAX_CLOCK}, got ${JSON.stringify(payload.ck)}`);
   }
 
   validateBlocs(payload.bl, errors);
@@ -338,6 +358,24 @@ export function validateTurnPayload(payload, expectedYear) {
 // ---------------------------------------------------------------------------
 // History digest (Prompt 7) — full campaign, not just the last few turns.
 // ---------------------------------------------------------------------------
+// Finds whichever bloc currently holds a given nuclear code — this is how
+// the "your alliance" card survives bloc renames/splits/merges over a long
+// campaign, since we don't track a stable bloc ID, only the nuclear-code
+// invariant (every code lives in exactly one bloc, always). Also the
+// mechanism that will let a future "play as any nuclear power" feature work
+// with zero changes here — just pass a different code.
+// Returns [name, stats] or null if not found (defensive; shouldn't happen
+// given the invariant check, but the UI layer should never assume it).
+export function findPlayerBloc(blocs, code = "US") {
+  if (!blocs || typeof blocs !== "object") return null;
+  for (const [name, stats] of Object.entries(blocs)) {
+    if (stats && Array.isArray(stats.nu) && stats.nu.includes(code)) {
+      return [name, stats];
+    }
+  }
+  return null;
+}
+
 export function buildHistoryDigest({ year, clock, blocs, log }) {
   const completed = (log || []).filter((entry) => entry.decision || entry.doctrine);
   const lines = completed.map((entry) => {
