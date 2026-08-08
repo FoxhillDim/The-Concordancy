@@ -113,6 +113,3 @@ export async function callModel({ system, userPrompt, signal, model = "claude-so
 
   return text;
 }
-
-  return text;
-}
