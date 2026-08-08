@@ -3,9 +3,10 @@ import { Radio, ChevronRight, ChevronDown, RotateCcw, AlertTriangle, Send, Refre
 import {
   NUCLEAR_POWERS, METRIC_ORDER, METRIC_META,
   STARTER_BLOCS, DEFAULT_TACTICAL, DEFAULT_PHIL, INTRO_ENTRY,
-  STARTING_YEAR, STARTING_CLOCK,
-  valueColor, clockColor, trendSymbol,
-  buildHistoryDigest,
+  STARTING_YEAR, STARTING_CLOCK, MAX_CLOCK,
+  CLOCK_OUTER_COLOR, CLOCK_INNER_COLOR, CLOCK_TRACK_COLOR,
+  valueColor, clockRingFractions, trendSymbol,
+  buildHistoryDigest, findPlayerBloc,
   createTurnController,
 } from "./gameLogic.js";
 import { runTurn } from "./turnRunner.js";
@@ -68,7 +69,7 @@ Exact compact schema (short keys are deliberate, use them exactly):
   "h": "<headline>",
   "n": "<narrative>",
   "nt": "<historical precedent, one short phrase>",
-  "ck": <integer seconds to midnight; lower=more dangerous; baseline 130>,
+  "ck": <integer MINUTES to midnight, 0-120; lower=more dangerous; starts at 90>,
   "fl": "<staff warning or "">",
   "bl": {
     "<Bloc Name, rename/merge/split as justified>": {
@@ -90,23 +91,39 @@ function TrendArrow({ trend }) {
   const { glyph, className } = trendSymbol(trend);
   return <span className={className}>{glyph}</span>;
 }
-function DoomsdayGauge({ seconds }) {
-  const max = 180;
-  const pct = Math.max(0, Math.min(1, seconds / max));
-  const angle = 270 * (1 - pct);
-  const r = 42, c = 2 * Math.PI * r, dash = c * (angle / 360);
-  const color = clockColor(seconds);
+
+// Two concentric rings on a literal minutes-to-midnight scale (0-120).
+// Outer ring (61-120, green) drains first as danger rises; only once it's
+// empty does the inner ring (0-60, yellow) begin draining toward true
+// midnight. Fixed two-tone scheme, no value-dependent gradient — kept
+// intentionally simple per design direction.
+function DoomsdayGauge({ minutes }) {
+  const { outer, inner } = clockRingFractions(minutes);
+  const cx = 80, cy = 80;
+  const rOuter = 66, swOuter = 10;
+  const rInner = 46, swInner = 10;
+  const cOuter = 2 * Math.PI * rOuter;
+  const cInner = 2 * Math.PI * rInner;
+  const dashOuter = cOuter * outer;
+  const dashInner = cInner * inner;
   return (
-    <svg width="110" height="110" viewBox="0 0 110 110">
-      <circle cx="55" cy="55" r={r} fill="none" stroke="#1c2530" strokeWidth="8" />
-      <circle cx="55" cy="55" r={r} fill="none" stroke={color} strokeWidth="8"
-        strokeDasharray={`${dash} ${c - dash}`} strokeLinecap="round"
-        transform="rotate(-90 55 55)" style={{ transition: "stroke-dasharray 900ms ease, stroke 900ms ease" }} />
-      <text x="55" y="51" textAnchor="middle" fill={color} fontFamily="IBM Plex Mono, monospace" fontSize="18" fontWeight="700">{seconds}</text>
-      <text x="55" y="66" textAnchor="middle" fill="#6b7785" fontFamily="IBM Plex Mono, monospace" fontSize="8" letterSpacing="1">SEC / MIDNIGHT</text>
+    <svg width="160" height="160" viewBox="0 0 160 160">
+      {/* Outer ring — track, then green fill */}
+      <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={CLOCK_TRACK_COLOR} strokeWidth={swOuter} />
+      <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={CLOCK_OUTER_COLOR} strokeWidth={swOuter}
+        strokeDasharray={`${dashOuter} ${cOuter - dashOuter}`} strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`} style={{ transition: "stroke-dasharray 900ms ease" }} />
+      {/* Inner ring — track, then yellow fill */}
+      <circle cx={cx} cy={cy} r={rInner} fill="none" stroke={CLOCK_TRACK_COLOR} strokeWidth={swInner} />
+      <circle cx={cx} cy={cy} r={rInner} fill="none" stroke={CLOCK_INNER_COLOR} strokeWidth={swInner}
+        strokeDasharray={`${dashInner} ${cInner - dashInner}`} strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cy})`} style={{ transition: "stroke-dasharray 900ms ease" }} />
+      <text x={cx} y={cy - 4} textAnchor="middle" fill="#e8edf2" fontFamily="IBM Plex Mono, monospace" fontSize="26" fontWeight="700">{minutes}</text>
+      <text x={cx} y={cy + 16} textAnchor="middle" fill="#6b7785" fontFamily="IBM Plex Mono, monospace" fontSize="9" letterSpacing="1">MIN / MIDNIGHT</text>
     </svg>
   );
 }
+
 function NucBadge({ code }) {
   const p = NUCLEAR_POWERS[code];
   if (!p) return null;
@@ -114,6 +131,42 @@ function NucBadge({ code }) {
     <span className="inline-flex items-center gap-1 mono text-[10px] bg-[#0d1218] border border-[#2a3644] rounded px-1.5 py-0.5">
       <span>{p.flag}</span><span className="text-[#c4ccd4]">{p.name}</span>
     </span>
+  );
+}
+
+// Shared bloc-card markup — used both in the Global Dashboard list and (once)
+// in the Alliance Dashboard's "your alliance" slot, so the two never drift
+// visually out of sync with each other.
+function BlocCard({ name, s }) {
+  return (
+    <div className="border border-[#1c2530] rounded-lg p-3 bg-[#10151c]">
+      <div className="text-[12px] font-bold mb-2 text-[#e8edf2] leading-snug">{name}</div>
+      <div className="space-y-1">
+        {METRIC_ORDER.map((k, idx) => (
+          <div key={k} className="flex items-center justify-between mono text-[10px]">
+            <span className="font-bold text-[#9aa5b1]">{METRIC_META[k].label}</span>
+            <span className={`flex items-center gap-1 font-bold ${valueColor(s[k], METRIC_META[k].invert)}`}>
+              {s[k]}<TrendArrow trend={s.t ? s.t[idx] : "f"} />
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 pt-2 border-t border-[#1c2530] space-y-1.5">
+        <div className="mono text-[10px] font-bold text-[#9aa5b1] mb-1">NUCLEAR POWERS</div>
+        <div className="flex flex-wrap gap-1">
+          {(s.nu || []).map((code) => <NucBadge key={code} code={code} />)}
+          {(!s.nu || s.nu.length === 0) && <span className="mono text-[10px] text-[#4a5561]">none</span>}
+        </div>
+        <div className="flex items-center justify-between mono text-[10px] pt-1">
+          <span className="font-bold text-[#9aa5b1]">Country States</span>
+          <span className="font-bold text-[#5ee1ff]">{s.ct ?? "—"} / 193</span>
+        </div>
+        <div className="flex items-center justify-between mono text-[10px]">
+          <span className="font-bold text-[#9aa5b1]">Member Power</span>
+          <span className="font-bold text-[#ffb020]">{s.pw ?? "—"} / 100</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -234,8 +287,15 @@ export default function App() {
     setLoading(false);
   }
 
+  // "Your alliance" is whichever bloc currently holds the US nuclear code —
+  // hardcoded for now (see gameLogic.js findPlayerBloc for why this is
+  // already built to generalize to "play as any nuclear power" later).
+  const playerEntry = findPlayerBloc(blocs, "US");
+  const playerName = playerEntry ? playerEntry[0] : null;
+  const otherBlocEntries = Object.entries(blocs).filter(([name]) => name !== playerName);
+
   return (
-    <div className="min-h-screen w-full bg-[#0a0e12] text-[#e8edf2]" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
+    <div className="h-screen w-full overflow-hidden flex flex-col bg-[#0a0e12] text-[#e8edf2]" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
         .mono { font-family: 'IBM Plex Mono', monospace; }
@@ -246,7 +306,7 @@ export default function App() {
         .fadein { animation: fadein 500ms ease both; } @keyframes fadein { from { opacity: 0; transform: translateY(4px);} to { opacity:1; transform: translateY(0);} }
       `}</style>
 
-      <div className="border-b border-[#1c2530] px-4 md:px-8 py-3 flex items-center justify-between">
+      <div className="border-b border-[#1c2530] px-4 md:px-8 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <Radio size={18} className="text-[#5ee1ff]" />
           <div>
@@ -265,51 +325,37 @@ export default function App() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-0">
-        <div className="border-r border-[#1c2530] px-4 py-5 space-y-5">
-          <div className="flex flex-col items-center border border-[#1c2530] rounded-lg py-3 bg-[#10151c] scanline">
+      {/* Alliance Dashboard — full-width bar, height matches the left
+          sidebar's width (320px). Houses the Doomsday Clock and the
+          player's own alliance card, with genuine reserved space for
+          future modules (not a placeholder box — just real empty width). */}
+      <div className="border-b border-[#1c2530] px-4 md:px-8 py-4 shrink-0 overflow-x-auto" style={{ height: 320 }}>
+        <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-3">ALLIANCE DASHBOARD</div>
+        <div className="flex items-start gap-4 h-[260px]">
+          <div className="flex flex-col items-center justify-center border border-[#1c2530] rounded-lg py-3 px-4 bg-[#10151c] scanline shrink-0 h-full">
             <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-1">DOOMSDAY CLOCK</div>
-            <DoomsdayGauge seconds={clock} />
+            <DoomsdayGauge minutes={clock} />
           </div>
+          {playerEntry && (
+            <div className="shrink-0 w-[300px] h-full overflow-y-auto">
+              <BlocCard name={playerName} s={playerEntry[1]} />
+            </div>
+          )}
+          <div className="flex-1 min-w-[40px]" />
+        </div>
+      </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-0 flex-1 min-h-0">
+        <div className="border-r border-[#1c2530] px-4 py-5 space-y-5 overflow-y-auto">
           <div>
             <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-2">GLOBAL DASHBOARD</div>
             <div className="space-y-3">
-              {Object.entries(blocs).map(([name, s]) => (
-                <div key={name} className="border border-[#1c2530] rounded-lg p-3 bg-[#10151c]">
-                  <div className="text-[12px] font-bold mb-2 text-[#e8edf2] leading-snug">{name}</div>
-                  <div className="space-y-1">
-                    {METRIC_ORDER.map((k, idx) => (
-                      <div key={k} className="flex items-center justify-between mono text-[10px]">
-                        <span className="font-bold text-[#9aa5b1]">{METRIC_META[k].label}</span>
-                        <span className={`flex items-center gap-1 font-bold ${valueColor(s[k], METRIC_META[k].invert)}`}>
-                          {s[k]}<TrendArrow trend={s.t ? s.t[idx] : "f"} />
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-[#1c2530] space-y-1.5">
-                    <div className="mono text-[10px] font-bold text-[#9aa5b1] mb-1">NUCLEAR POWERS</div>
-                    <div className="flex flex-wrap gap-1">
-                      {(s.nu || []).map((code) => <NucBadge key={code} code={code} />)}
-                      {(!s.nu || s.nu.length === 0) && <span className="mono text-[10px] text-[#4a5561]">none</span>}
-                    </div>
-                    <div className="flex items-center justify-between mono text-[10px] pt-1">
-                      <span className="font-bold text-[#9aa5b1]">Country States</span>
-                      <span className="font-bold text-[#5ee1ff]">{s.ct ?? "—"} / 193</span>
-                    </div>
-                    <div className="flex items-center justify-between mono text-[10px]">
-                      <span className="font-bold text-[#9aa5b1]">Member Power</span>
-                      <span className="font-bold text-[#ffb020]">{s.pw ?? "—"} / 100</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {otherBlocEntries.map(([name, s]) => <BlocCard key={name} name={name} s={s} />)}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-col h-[calc(100vh-57px)]">
+        <div className="flex flex-col h-full overflow-hidden">
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4">
             {log.map((entry, i) => {
               const expanded = isExpanded(i);
@@ -381,7 +427,7 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <input value={customTactical} onChange={(e) => setCustomTactical(e.target.value)}
+                <input value={customTactical} onChange={(e) => setCustomTactical(e.target.value)} maxLength={240}
                   placeholder="Or type your own tactical directive…"
                   className="mt-2 w-full mono text-[13px] bg-[#10151c] border border-[#1c2530] rounded px-3 py-2 text-[#e8edf2] placeholder-[#4a5561] focus:outline-none focus:border-[#5ee1ff]" />
               </div>
@@ -397,7 +443,7 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <input value={customPhil} onChange={(e) => setCustomPhil(e.target.value)}
+                <input value={customPhil} onChange={(e) => setCustomPhil(e.target.value)} maxLength={240}
                   placeholder="Or type your own doctrine…"
                   className="mt-2 w-full mono text-[13px] bg-[#10151c] border border-[#1c2530] rounded px-3 py-2 text-[#e8edf2] placeholder-[#4a5561] focus:outline-none focus:border-[#ffb020]" />
               </div>
