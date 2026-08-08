@@ -355,8 +355,8 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex flex-col h-full overflow-hidden">
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4">
+<div className="flex flex-row h-full overflow-hidden">
+          <div ref={scrollRef} className="flex-1 min-w-0 overflow-y-auto px-4 md:px-8 py-6 space-y-4 border-r border-[#1c2530]">
             {log.map((entry, i) => {
               const expanded = isExpanded(i);
               return (
@@ -415,7 +415,7 @@ export default function App() {
           </div>
 
           {started && !loading && (
-            <div className="border-t border-[#1c2530] px-4 md:px-8 py-4 space-y-4 bg-[#0d1218] max-h-[52vh] overflow-y-auto">
+<div className="w-[380px] shrink-0 overflow-y-auto px-4 py-4 space-y-4 bg-[#0d1218]">
               <div>
                 <div className="mono text-[10px] tracking-[0.2em] text-[#5ee1ff] mb-2">TACTICAL DIRECTIVE — {year + 1}</div>
                 <div className="flex flex-col gap-1.5">
