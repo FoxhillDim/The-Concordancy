@@ -3,7 +3,7 @@ import { Radio, ChevronRight, ChevronDown, RotateCcw, AlertTriangle, Send, Refre
 import {
   NUCLEAR_POWERS, METRIC_ORDER, METRIC_META,
   STARTER_BLOCS, DEFAULT_TACTICAL, DEFAULT_PHIL, INTRO_ENTRY,
-  STARTING_YEAR, STARTING_CLOCK, MAX_CLOCK,
+  STARTING_YEAR, STARTING_MONTH, STARTING_CLOCK, MAX_CLOCK,
   CLOCK_OUTER_COLOR, CLOCK_INNER_COLOR, CLOCK_TRACK_COLOR,
   valueColor, clockRingFractions, trendSymbol,
   buildHistoryDigest, findPlayerBloc,
@@ -11,15 +11,16 @@ import {
 } from "./gameLogic.js";
 import { runTurn } from "./turnRunner.js";
 
-// Historical grounding is UNCHANGED from the pre-hardening version — this
-// repair cycle did not touch the simulation's instructions or premise.
+// Historical grounding — the only change from the pre-hardening version is
+// GAME START now interpolates STARTING_YEAR dynamically instead of a
+// hardcoded year, matching the "always starts in the real present" fix.
 const HISTORICAL_GROUNDING = `
 You are the simulation engine for "PROJECT CONCORDAT," a text-based geopolitical
 wargame in the spirit of Oregon Trail (compounding consequences) and WarGames (a
 calm, all-knowing military-AI narrator). You are a war-room simulation core: precise,
 a little cold, never sycophantic. Never break the fourth wall. Never moralize.
 
-WORLD STATE AT GAME START (2027): a global conflict has organized around religious/
+WORLD STATE AT GAME START (${STARTING_YEAR}): a global conflict has organized around religious/
 civilizational blocs layered over real nuclear-era alliance logic. There are EXACTLY
 nine nuclear-armed states, referred to ONLY by these codes:
 US, UK, FR (Concordat West) — RU (Orthodox Commonwealth) — CN, IN (Dharmic-Confucian
@@ -170,6 +171,64 @@ function BlocCard({ name, s }) {
   );
 }
 
+// Onboarding screen 1 of 2 — character immersion. Deliberately terse and
+// in-voice with the rest of the simulation core's writing, not a generic
+// "welcome to the tutorial" tone.
+function IntroCharacter({ onContinue }) {
+  return (
+    <div className="flex-1 flex items-center justify-center px-6 py-10 overflow-y-auto">
+      <div className="max-w-2xl">
+        <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-3">COMMAND BRIEFING — 1 OF 2</div>
+        <h1 className="text-2xl font-semibold mb-4 text-[#e8edf2]">You are the President of the United States.</h1>
+        <div className="space-y-4 text-[15px] leading-relaxed text-[#c4ccd4]">
+          <p>Nine nations hold nuclear weapons. Civilizational and religious fault lines are hardening into armed blocs faster than any treaty can contain them. Every choice you make — every ally reassured or abandoned, every provocation answered or absorbed — is remembered, referenced, and repaid, sometimes years later.</p>
+          <p>There is no undo, and no committee to defer to. The decisions are yours alone. The world recalibrates around them whether you intended that reading or not.</p>
+          <p>Each year you will issue two orders: a <span className="text-[#5ee1ff] font-semibold">TACTICAL directive</span> — the specific action that defines the year — and a <span className="text-[#ffb020] font-semibold">DOCTRINE</span> — the standing character of your leadership, which colors how the world interprets everything else you do.</p>
+          <p className="text-[#e8edf2] font-medium">History is watching. So is everyone else at the table.</p>
+        </div>
+        <button onClick={onContinue}
+          className="mt-8 mono text-xs tracking-wider border border-[#5ee1ff] text-[#5ee1ff] rounded px-4 py-2 hover:bg-[#5ee1ff] hover:text-[#0a0e12] transition">
+          CONTINUE →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Onboarding screen 2 of 2 — orienting the player to the dashboard before
+// the real narrative starts, so the UI isn't being explained for the first
+// time in the middle of an actual decision.
+function IntroDashboardGuide({ onContinue }) {
+  const items = [
+    { title: "Doomsday Clock", body: "Minutes to midnight, 0-120. The outer green ring drains first as danger rises; only once it's empty does the inner yellow ring begin draining toward true midnight." },
+    { title: "Alliance Dashboard", body: "Your own bloc — Concordat West, by default — with its full stat breakdown, always visible up top." },
+    { title: "Global Dashboard", body: "Every other bloc in the world, left-hand column. Watch these as closely as your own." },
+    { title: "The six metrics", body: "Military Readiness, Economic Stability, Will to Fight, Alliance Cohesion, Int'l Legitimacy, Proliferation Risk — each with a trend arrow showing this year's direction, not just the number." },
+    { title: "Nuclear Powers / Country States / Member Power", body: "Which nuclear-armed nations sit in a bloc, how many of the 193 UN states currently follow it, and a consolidated index of its real-world weight." },
+    { title: "Tactical vs. Doctrine", body: "Tactical is what you do this year. Doctrine is who you are while doing it — the same action reads differently depending on the posture behind it." },
+  ];
+  return (
+    <div className="flex-1 flex items-center justify-center px-6 py-10 overflow-y-auto">
+      <div className="max-w-2xl w-full">
+        <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-3">COMMAND BRIEFING — 2 OF 2</div>
+        <h1 className="text-2xl font-semibold mb-6 text-[#e8edf2]">Reading the board.</h1>
+        <div className="space-y-4">
+          {items.map((item) => (
+            <div key={item.title} className="border-l-2 border-[#2a3644] pl-4">
+              <div className="text-[13px] font-bold text-[#e8edf2] mb-1">{item.title}</div>
+              <div className="text-[13px] leading-relaxed text-[#9aa5b1]">{item.body}</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onContinue}
+          className="mt-8 mono text-xs tracking-wider border border-[#5ee1ff] text-[#5ee1ff] rounded px-4 py-2 hover:bg-[#5ee1ff] hover:text-[#0a0e12] transition">
+          ENTER THE SITUATION ROOM →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [year, setYear] = useState(STARTING_YEAR);
   const [blocs, setBlocs] = useState(STARTER_BLOCS);
@@ -183,6 +242,7 @@ export default function App() {
   const [customPhil, setCustomPhil] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const [onboardStep, setOnboardStep] = useState(1); // 1 & 2 = briefing screens, 3 = main dashboard
   const [error, setError] = useState(null);
   const [manualToggle, setManualToggle] = useState({});
   const [lastDirectives, setLastDirectives] = useState(null);
@@ -216,7 +276,14 @@ export default function App() {
     setError(null);
     setLastDirectives({ tacticalText, doctrineText });
 
-    const expectedYear = year + 1;
+    // FIRST turn is an exception: the baseline (INTRO_ENTRY) already
+    // describes the state of the world as this year begins, so the
+    // player's first directive resolves THIS SAME year, not year+1 — no
+    // unexplained one-year gap between "here's the world now" and "your
+    // first decision takes effect." Every turn after that increments
+    // normally. log.length===1 means only INTRO_ENTRY is present so far.
+    const isFirstTurn = log.length === 1;
+    const expectedYear = isFirstTurn ? year : year + 1;
     const digest = buildHistoryDigest({ year, clock, blocs, log });
     const userPrompt = `${digest}\n\nTACTICAL DIRECTIVE FOR ${expectedYear}: "${tacticalText}"\nDOCTRINE FOR ${expectedYear}: "${doctrineText}"\n\nResolve this year now. Return ONLY the compact JSON schema, staying strictly inside the word caps.`;
 
@@ -284,7 +351,7 @@ export default function App() {
     setTacticalOpts(DEFAULT_TACTICAL); setPhilOpts(DEFAULT_PHIL);
     setSelTactical(0); setSelPhil(0); setCustomTactical(""); setCustomPhil("");
     setStarted(false); setError(null); setManualToggle({}); setLastDirectives(null);
-    setLoading(false);
+    setLoading(false); setOnboardStep(1);
   }
 
   // "Your alliance" is whichever bloc currently holds the US nuclear code —
@@ -293,6 +360,12 @@ export default function App() {
   const playerEntry = findPlayerBloc(blocs, "US");
   const playerName = playerEntry ? playerEntry[0] : null;
   const otherBlocEntries = Object.entries(blocs).filter(([name]) => name !== playerName);
+
+  // Single source of truth for "what year does the next directive resolve
+  // for" — mirrors the same first-turn exception used inside resolveTurn,
+  // so the Begin Campaign button, the directive headers, and the loading
+  // indicator can never drift out of sync with each other again.
+  const nextActionYear = log.length === 1 ? year : year + 1;
 
   return (
     <div className="h-screen w-full overflow-hidden flex flex-col bg-[#0a0e12] text-[#e8edf2]" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
@@ -325,6 +398,11 @@ export default function App() {
         </div>
       </div>
 
+      {onboardStep === 1 && <IntroCharacter onContinue={() => setOnboardStep(2)} />}
+      {onboardStep === 2 && <IntroDashboardGuide onContinue={() => setOnboardStep(3)} />}
+
+      {onboardStep === 3 && (
+      <>
       {/* Alliance Dashboard — full-width bar, height matches the left
           sidebar's width (320px). Houses the Doomsday Clock and the
           player's own alliance card, with genuine reserved space for
@@ -355,7 +433,7 @@ export default function App() {
           </div>
         </div>
 
-<div className="flex flex-row h-full overflow-hidden">
+        <div className="flex flex-row h-full overflow-hidden">
           <div ref={scrollRef} className="flex-1 min-w-0 overflow-y-auto px-4 md:px-8 py-6 space-y-4 border-r border-[#1c2530]">
             {log.map((entry, i) => {
               const expanded = isExpanded(i);
@@ -398,11 +476,11 @@ export default function App() {
 
             {!started && (
               <button onClick={() => setStarted(true)} className="mono text-xs tracking-wider border border-[#5ee1ff] text-[#5ee1ff] rounded px-4 py-2 hover:bg-[#5ee1ff] hover:text-[#0a0e12] transition">
-                ▶ BEGIN CAMPAIGN — 2027
+                ▶ BEGIN CAMPAIGN — {nextActionYear}
               </button>
             )}
             {loading && (
-              <div className="mono text-xs text-[#5ee1ff] flex items-center gap-2"><span className="blink">▍</span> RESOLVING YEAR {year + 1}…</div>
+              <div className="mono text-xs text-[#5ee1ff] flex items-center gap-2"><span className="blink">▍</span> RESOLVING YEAR {nextActionYear}…</div>
             )}
             {error && (
               <div className="max-w-2xl border border-[#3a1c1c] bg-[#1c0e0e] rounded px-3 py-2 space-y-2">
@@ -415,9 +493,9 @@ export default function App() {
           </div>
 
           {started && !loading && (
-<div className="w-[380px] shrink-0 overflow-y-auto px-4 py-4 space-y-4 bg-[#0d1218]">
+            <div className="w-[380px] shrink-0 overflow-y-auto px-4 py-4 space-y-4 bg-[#0d1218]">
               <div>
-                <div className="mono text-[10px] tracking-[0.2em] text-[#5ee1ff] mb-2">TACTICAL DIRECTIVE — {year + 1}</div>
+                <div className="mono text-[10px] tracking-[0.2em] text-[#5ee1ff] mb-2">TACTICAL DIRECTIVE — {nextActionYear}</div>
                 <div className="flex flex-col gap-1.5">
                   {tacticalOpts.map((opt, i) => (
                     <button key={i} onClick={() => { setSelTactical(i); setCustomTactical(""); }}
@@ -433,7 +511,7 @@ export default function App() {
               </div>
 
               <div>
-                <div className="mono text-[10px] tracking-[0.2em] text-[#ffb020] mb-2">STRATEGIC DOCTRINE — {year + 1}</div>
+                <div className="mono text-[10px] tracking-[0.2em] text-[#ffb020] mb-2">STRATEGIC DOCTRINE — {nextActionYear}</div>
                 <div className="flex flex-col gap-1.5">
                   {philOpts.map((opt, i) => (
                     <button key={i} onClick={() => { setSelPhil(i); setCustomPhil(""); }}
@@ -456,6 +534,8 @@ export default function App() {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
