@@ -79,7 +79,15 @@ export const DEFAULT_PHIL = [
   { x: "Lead through moral authority — restraint over raw power", y: "Slow to pay off, but can actually end it" },
 ];
 
-export const STARTING_YEAR = 2026;
+// Dynamic "now" — this is deliberately real-clock-driven rather than a
+// hardcoded year, so the campaign always opens in the actual present,
+// whenever it's played. STARTING_YEAR is also the FIRST ACTIONABLE year
+// (not year+1) — the baseline narrative describes the state of the world
+// as this year begins; the player's first directive resolves what happens
+// by the end of that SAME year. See App.jsx's `nextActionYear` for how
+// this is threaded through consistently everywhere a year is displayed.
+export const STARTING_YEAR = new Date().getFullYear();
+export const STARTING_MONTH = new Date().toLocaleString("en-US", { month: "long" });
 // Doomsday Clock is on a literal minutes-to-midnight scale now: 0 (midnight)
 // to MAX_CLOCK (safest). CLOCK_SPLIT is where the two-ring gauge divides —
 // the inner ring covers 0..CLOCK_SPLIT (the "final hour," yellow), the
@@ -95,7 +103,7 @@ export const INTRO_ENTRY = {
   headline: "The Fault Lines Set",
   narrative:
     "Nine nations, nine flags, one accelerating alignment: the world's power blocs are consolidating around civilizational and religious lines for the first time since before the Cold War. The United States holds the deepest alliance network on Earth and has not yet decided what to do with it.\n\nIntelligence assessments describe a board more nuclear-armed and more fractured than at any point since 1962. Every bloc believes it can still win. That belief is the war.",
-  note: "Baseline year — sets the pre-war world state as of January 2026.",
+  note: `Baseline — sets the pre-war world state as of ${STARTING_MONTH} ${STARTING_YEAR}.`,
   flag: "",
   decision: "",
   doctrine: "",
