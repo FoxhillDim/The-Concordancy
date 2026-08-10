@@ -36,7 +36,7 @@ export const METRIC_META = {
 export const LEGAL_TRENDS = ["u", "d", "uu", "dd", "f"];
 
 export function flatTrend() {
-  return ["f", "f", "f", "f", "f", "f"];
+return ["f", "f", "f", "f", "f", "f", "f", "f"]; // 8: 6 core metrics + ct + pw
 }
 
 export const STARTER_BLOCS = {
@@ -287,8 +287,8 @@ function validateBlocs(bl, errors) {
         errors.push(`bl["${name}"].${k}: must be an integer 0-100, got ${JSON.stringify(v)}`);
       }
     }
-    if (!Array.isArray(s.t) || s.t.length !== 6) {
-      errors.push(`bl["${name}"].t: must be a 6-element array`);
+if (!Array.isArray(s.t) || s.t.length !== 8) {
+errors.push(`bl["${name}"].t: must be an 8-element array`);
     } else {
       s.t.forEach((code, idx) => {
         if (!LEGAL_TRENDS.includes(code)) {
