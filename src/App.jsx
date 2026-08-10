@@ -7,6 +7,7 @@ import {
   CLOCK_OUTER_COLOR, CLOCK_INNER_COLOR, CLOCK_TRACK_COLOR,
   valueColor, clockRingFractions, trendSymbol,
   buildHistoryDigest, findPlayerBloc,
+  formatPrecedentLibrary,
   createTurnController,
 } from "./gameLogic.js";
 import { runTurn } from "./turnRunner.js";
@@ -54,6 +55,13 @@ GROUNDING RULES:
    (0-100) is a consolidated power index (population+GDP+military weight vs global).
 8. If nuclear weapons are used, model it with real gravity and lasting consequences.
 9. Reference the player's past decisions plausibly — grudges and trust compound.
+
+HISTORICAL PRECEDENT LIBRARY — draw on these as reasoning anchors, especially
+on genuinely novel or difficult turns. Reference the PATTERN they teach in your
+narrative, not the historical event by name — these inform your judgment, they
+are not meant to be name-dropped:
+
+${formatPrecedentLibrary()}
 
 OUTPUT FORMAT — RETURN ONLY VALID JSON. NO markdown fences. NO preamble/epilogue.
 HARD TOKEN BUDGET — stay inside these word caps exactly, they are load-bearing, not
