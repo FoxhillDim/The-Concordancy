@@ -364,16 +364,74 @@ if (!isFiniteInt(payload.ck) || payload.ck < 0 || payload.ck > MAX_CLOCK) {
 }
 
 // ---------------------------------------------------------------------------
-// History digest (Prompt 7) — full campaign, not just the last few turns.
+// Historical Precedent Library — EXPANDABLE reference the simulation draws
+// on for narrative grounding, beyond the compact numbered rules in the
+// system prompt. Priority order (most to least emphasis, per design
+// direction): alliance formation/betrayal, insurgency/proxy war, nuclear
+// crisis management, diplomatic breakthroughs, economic coercion
+// (deliberately thin — this is a religious/military sim first, not an
+// economic one).
+//
+// TO ADD MORE LATER: append an object to HISTORICAL_PRECEDENTS with a
+// category from PRECEDENT_CATEGORY_ORDER, a short title, and a one-to-two
+// sentence PARAPHRASED lesson (never a direct quote — always paraphrase,
+// same discipline as everywhere else in this app).
 // ---------------------------------------------------------------------------
-// Finds whichever bloc currently holds a given nuclear code — this is how
-// the "your alliance" card survives bloc renames/splits/merges over a long
-// campaign, since we don't track a stable bloc ID, only the nuclear-code
-// invariant (every code lives in exactly one bloc, always). Also the
-// mechanism that will let a future "play as any nuclear power" feature work
-// with zero changes here — just pass a different code.
-// Returns [name, stats] or null if not found (defensive; shouldn't happen
-// given the invariant check, but the UI layer should never assume it).
+export const PRECEDENT_CATEGORY_ORDER = ["alliance", "insurgency", "nuclear", "diplomacy", "economic"];
+export const PRECEDENT_CATEGORY_LABELS = {
+  alliance: "ALLIANCE FORMATION & BETRAYAL",
+  insurgency: "INSURGENCY & PROXY WAR",
+  nuclear: "NUCLEAR CRISIS MANAGEMENT",
+  diplomacy: "DIPLOMATIC BREAKTHROUGHS",
+  economic: "ECONOMIC COERCION",
+};
+
+export const HISTORICAL_PRECEDENTS = [
+  // -- alliance formation / betrayal --
+  { category: "alliance", title: "NATO's founding (1949)", lesson: "Alliances form fastest around one clear, immediate shared threat, not shared identity. A mutual-defense promise rarely tested holds; one tested often and inconsistently erodes fast." },
+  { category: "alliance", title: "Molotov-Ribbentrop Pact (1939)", lesson: "Ideological enemies will ally short-term if it buys strategic room. Everyone reads such pacts as temporary — betrayal is expected the moment either side gains enough advantage to act on it." },
+  { category: "alliance", title: "Sino-Soviet split (1960s)", lesson: "Shared ideology doesn't guarantee alliance stability. Border disputes and leadership rivalry fractured a supposedly unified bloc within a single generation." },
+  { category: "alliance", title: "Suez Crisis collusion (1956)", lesson: "Secret alliances collapse fast when a stronger patron disapproves. US financial pressure on the pound forced British-French-Israeli withdrawal within days — alliance value is capped by what your strongest ally will tolerate." },
+  { category: "alliance", title: "Warsaw Pact collapse (1989-91)", lesson: "Alliances built on imposed loyalty rather than genuine shared interest don't decline gradually — they evaporate almost overnight once the enforcing power's will visibly weakens." },
+  { category: "alliance", title: "Entente Cordiale (1904)", lesson: "Centuries-old rivals can form durable alliances when a third power's rise makes old grievances suddenly irrelevant by comparison." },
+
+  // -- insurgency / proxy war --
+  { category: "insurgency", title: "Soviet-Afghan War (1979-89)", lesson: "Arming an insurgency can bleed a superpower without direct confrontation — but the weapons and networks created outlive the conflict and become their own future threat." },
+  { category: "insurgency", title: "Vietnam War escalation", lesson: "Great powers backing opposite sides in a civil conflict escalate through incremental mission creep, not one decisive choice. Each step is individually justifiable; the sum becomes an unplanned full-scale war." },
+  { category: "insurgency", title: "Iran-Contra precedent", lesson: "Covert proxy support that violates a government's own stated policy, once exposed, damages domestic legitimacy far more than the operation's tactical value ever justified." },
+  { category: "insurgency", title: "Cuban revolutionary export (1960s-80s)", lesson: "A militarily weak power can project influence far beyond its means by exporting cheap revolutionary support, forcing larger rivals into containment responses disproportionate to the original threat." },
+
+  // -- nuclear crisis management --
+  { category: "nuclear", title: "Cuban Missile Crisis (1962)", lesson: "Private backchannel communication resolved what public brinkmanship could not. A face-saving secret concession let both sides claim victory domestically while avoiding war." },
+  { category: "nuclear", title: "Yom Kippur War DEFCON 3 (1973)", lesson: "Superpower nuclear signaling can de-escalate a regional conflict by making the cost of continued involvement clear to both sides — without a shot fired between the superpowers themselves." },
+  { category: "nuclear", title: "Able Archer 83", lesson: "A routine military exercise, poorly communicated, can be misread by a paranoid adversary as first-strike preparation. The closest the Cold War came to accidental nuclear war stemmed from ambiguity, not aggression." },
+  { category: "nuclear", title: "Israel's undeclared arsenal", lesson: "Strategic ambiguity about a weapon's existence can serve deterrence without inviting the backlash of open declaration — but only until an attack forces the question." },
+
+  // -- diplomatic breakthroughs --
+  { category: "diplomacy", title: "Camp David Accords (1978)", lesson: "A mediator with no direct stake, combined with sustained personal relationship-building between adversarial leaders, can overcome decades of stated hostility faster than institutional diplomacy." },
+  { category: "diplomacy", title: "Nixon's China opening (1972)", lesson: "A leader with unimpeachable hardline credentials can make concessions a moderate leader could never survive politically making." },
+  { category: "diplomacy", title: "Good Friday Agreement (1998)", lesson: "Ending a protracted conflict often requires formally acknowledging both sides' core grievances at once, not declaring one side's narrative the winner." },
+
+  // -- economic coercion (deliberately thin — secondary to this sim's focus) --
+  { category: "economic", title: "1973 Oil Embargo", lesson: "Resource leverage can force policy change faster than military pressure, but it also accelerates the target's long-term effort to become independent of that resource." },
+  { category: "economic", title: "Suez financial pressure (1956)", lesson: "Even a close ally bows to economic coercion faster than military pressure, if the economic stakes are existential enough." },
+];
+
+// Formats the library into prompt-ready text, grouped by category in
+// priority order. Pure function, independently testable.
+export function formatPrecedentLibrary(precedents = HISTORICAL_PRECEDENTS) {
+  const lines = [];
+  for (const cat of PRECEDENT_CATEGORY_ORDER) {
+    const entries = precedents.filter((p) => p.category === cat);
+    if (entries.length === 0) continue;
+    lines.push(PRECEDENT_CATEGORY_LABELS[cat] + ":");
+    for (const e of entries) {
+      lines.push(`- ${e.title} — ${e.lesson}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
 export function findPlayerBloc(blocs, code = "US") {
   if (!blocs || typeof blocs !== "object") return null;
   for (const [name, stats] of Object.entries(blocs)) {
