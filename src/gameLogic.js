@@ -40,7 +40,7 @@ return ["f", "f", "f", "f", "f", "f", "f", "f"]; // 8: 6 core metrics + ct + pw
 }
 
 export const STARTER_BLOCS = {
-  "Concordat West — USA / UK / France": {
+  "Western Alliance — USA / UK / France": {
     m: 78, e: 64, w: 55, c: 61, l: 70, p: 30, t: flatTrend(),
     nu: ["US", "UK", "FR"], ct: 45, pw: 72,
   },
@@ -48,21 +48,30 @@ export const STARTER_BLOCS = {
     m: 65, e: 40, w: 68, c: 60, l: 48, p: 35, t: flatTrend(),
     nu: ["RU"], ct: 9, pw: 38,
   },
-  "Ummah Pact — Pakistan-led": {
+  "Sunni Coalition — Pakistan-led": {
     m: 52, e: 50, w: 62, c: 50, l: 55, p: 40, t: flatTrend(),
     nu: ["PK"], ct: 20, pw: 34,
   },
-  "Dharmic-Confucian Sphere — China / India": {
+  "Asian Compact — China / India": {
     m: 76, e: 74, w: 30, c: 45, l: 58, p: 35, t: flatTrend(),
     nu: ["CN", "IN"], ct: 25, pw: 66,
   },
-  "Israel — Nuclear Wildcard": {
+  "Israel — Independent": {
     m: 45, e: 55, w: 72, c: 25, l: 42, p: 50, t: flatTrend(),
     nu: ["IL"], ct: 1, pw: 22,
   },
-  "Rogue Nuclear Developers — North Korea / Iran": {
-    m: 30, e: 32, w: 68, c: 20, l: 28, p: 60, t: flatTrend(),
-    nu: ["KP"], ct: 2, pw: 14,
+  "North Korea — Independent": {
+    m: 30, e: 25, w: 70, c: 15, l: 15, p: 55, t: flatTrend(),
+    nu: ["KP"], ct: 1, pw: 8,
+  },
+  // Iran holds none of the 9 fixed nuclear codes at game start — it's
+  // deliberately "a tenth actor," not one of the nine, per the system
+  // prompt. An empty "nu" array is valid: the nuclear invariant check only
+  // requires each of the 9 FIXED codes appear in exactly one bloc, it
+  // doesn't require every bloc to hold one.
+  "Iran — Independent": {
+    m: 35, e: 20, w: 65, c: 20, l: 20, p: 65, t: flatTrend(),
+    nu: [], ct: 1, pw: 10,
   },
 };
 
@@ -268,8 +277,8 @@ function validateBlocs(bl, errors) {
     return;
   }
   const names = Object.keys(bl);
-  if (names.length < 4 || names.length > 7) {
-    errors.push(`bl: must contain 4-7 entries, got ${names.length}`);
+if (names.length < 4 || names.length > 8) {
+    errors.push(`bl: must contain 4-8 entries, got ${names.length}`);
   }
   for (const name of names) {
     if (!isNonEmptyString(name)) {
@@ -394,6 +403,11 @@ export const HISTORICAL_PRECEDENTS = [
   { category: "alliance", title: "Suez Crisis collusion (1956)", lesson: "Secret alliances collapse fast when a stronger patron disapproves. US financial pressure on the pound forced British-French-Israeli withdrawal within days — alliance value is capped by what your strongest ally will tolerate." },
   { category: "alliance", title: "Warsaw Pact collapse (1989-91)", lesson: "Alliances built on imposed loyalty rather than genuine shared interest don't decline gradually — they evaporate almost overnight once the enforcing power's will visibly weakens." },
   { category: "alliance", title: "Entente Cordiale (1904)", lesson: "Centuries-old rivals can form durable alliances when a third power's rise makes old grievances suddenly irrelevant by comparison." },
+  { category: "alliance", title: "July 1914 alliance cascade", lesson: "A regional crisis between two minor actors can drag every allied great power into total war within weeks, once mutual-defense treaties trigger in sequence. No single leader chooses the wider war — the alliance architecture makes it structurally inevitable once the first mobilization order is signed." },
+  { category: "alliance", title: "Rapallo Treaty (1922)", lesson: "Two states excluded and humiliated by the same postwar settlement will find each other useful allies regardless of ideological distance — shared pariah status is its own basis for cooperation." },
+  { category: "alliance", title: "Peace of Westphalia (1648)", lesson: "Ended Europe's deadliest religious war not with one faith's total victory, but by separating religious identity from political sovereignty entirely — rulers, not empires or churches, would determine religious alignment within their own borders. The exit ramp from a religious war is often territorial division, not conquest." },
+  { category: "alliance", title: "Congress of Vienna (1815)", lesson: "After Napoleon, the victors deliberately restored a balance of power rather than punishing France into permanent weakness, producing roughly 40 years without a general European war. Settlements that avoid humiliating the defeated side tend to outlast ones that don't." },
+  { category: "alliance", title: "Diplomatic Revolution of 1756", lesson: "France and Austria, enemies for over two centuries, allied virtually overnight once the strategic calculus flipped. Even 'ancient enmity' is negotiable the instant circumstances change enough." },
 
   // -- insurgency / proxy war --
   { category: "insurgency", title: "Soviet-Afghan War (1979-89)", lesson: "Arming an insurgency can bleed a superpower without direct confrontation — but the weapons and networks created outlive the conflict and become their own future threat." },
