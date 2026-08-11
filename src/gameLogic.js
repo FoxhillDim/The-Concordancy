@@ -414,21 +414,30 @@ export const HISTORICAL_PRECEDENTS = [
   { category: "insurgency", title: "Vietnam War escalation", lesson: "Great powers backing opposite sides in a civil conflict escalate through incremental mission creep, not one decisive choice. Each step is individually justifiable; the sum becomes an unplanned full-scale war." },
   { category: "insurgency", title: "Iran-Contra precedent", lesson: "Covert proxy support that violates a government's own stated policy, once exposed, damages domestic legitimacy far more than the operation's tactical value ever justified." },
   { category: "insurgency", title: "Cuban revolutionary export (1960s-80s)", lesson: "A militarily weak power can project influence far beyond its means by exporting cheap revolutionary support, forcing larger rivals into containment responses disproportionate to the original threat." },
-
+  { category: "insurgency", title: "Korean War (1950)", lesson: "The first Cold War proxy war set the template: a divided state becomes the battlefield, great powers intervene without formally declaring war on each other, and the conflict ends not in victory but an armistice that freezes the division for generations." },
+  { category: "insurgency", title: "Syrian Civil War proxy dynamics", lesson: "Multiple outside powers can each back a different faction in the same civil war simultaneously — victory for any single faction becomes nearly impossible once its sponsor's real interest is regional standing, not that faction's actual success." },
+  { category: "insurgency", title: "Peninsular War (1808-1814)", lesson: "Spanish guerrilla resistance bled Napoleon's dominant military for six years without ever winning a decisive battle, backed by British support. Occupying a hostile population is expensive even when you win every fight — attrition breaks occupiers, not battlefield losses." },
+  
   // -- nuclear crisis management --
   { category: "nuclear", title: "Cuban Missile Crisis (1962)", lesson: "Private backchannel communication resolved what public brinkmanship could not. A face-saving secret concession let both sides claim victory domestically while avoiding war." },
   { category: "nuclear", title: "Yom Kippur War DEFCON 3 (1973)", lesson: "Superpower nuclear signaling can de-escalate a regional conflict by making the cost of continued involvement clear to both sides — without a shot fired between the superpowers themselves." },
   { category: "nuclear", title: "Able Archer 83", lesson: "A routine military exercise, poorly communicated, can be misread by a paranoid adversary as first-strike preparation. The closest the Cold War came to accidental nuclear war stemmed from ambiguity, not aggression." },
   { category: "nuclear", title: "Israel's undeclared arsenal", lesson: "Strategic ambiguity about a weapon's existence can serve deterrence without inviting the backlash of open declaration — but only until an attack forces the question." },
+  { category: "nuclear", title: "Petrov Incident (1983)", lesson: "Automated early-warning systems produce false positives; the safeguard against accidental nuclear war is often one officer's judgment to disbelieve the machine. Technical reliability is not the same as decision-making reliability." },
+  { category: "nuclear", title: "Kargil War (1999)", lesson: "Two openly declared nuclear powers fought a real, sustained conventional war within a year of both testing weapons — deterrence caps the ceiling of a conflict, it doesn't prevent conflict from happening at all." },
+  { category: "nuclear", title: "JCPOA and its 2018 collapse", lesson: "A negotiated nonproliferation framework can genuinely constrain a weapons program for years — but unilateral withdrawal by one signatory, even without provocation, destroys the credibility of every future framework with that actor." },
 
   // -- diplomatic breakthroughs --
   { category: "diplomacy", title: "Camp David Accords (1978)", lesson: "A mediator with no direct stake, combined with sustained personal relationship-building between adversarial leaders, can overcome decades of stated hostility faster than institutional diplomacy." },
   { category: "diplomacy", title: "Nixon's China opening (1972)", lesson: "A leader with unimpeachable hardline credentials can make concessions a moderate leader could never survive politically making." },
   { category: "diplomacy", title: "Good Friday Agreement (1998)", lesson: "Ending a protracted conflict often requires formally acknowledging both sides' core grievances at once, not declaring one side's narrative the winner." },
+  { category: "diplomacy", title: "Reykjavik Summit (1986)", lesson: "Two superpower leaders came within one unresolved technical dispute of agreeing to abolish nuclear weapons entirely — proof total disarmament has been within reach before, and that it can still collapse over a single sticking point neither side will yield." },
+  { category: "diplomacy", title: "Congress of Berlin (1878)", lesson: "The great powers convened specifically to revise a prior treaty judged too favorable to one side and too destabilizing to the regional balance, redrawing borders by committee instead of by further war. When one power's unilateral gains threaten to overturn the wider order, others will often intervene diplomatically to claw the balance back." },
 
   // -- economic coercion (deliberately thin — secondary to this sim's focus) --
   { category: "economic", title: "1973 Oil Embargo", lesson: "Resource leverage can force policy change faster than military pressure, but it also accelerates the target's long-term effort to become independent of that resource." },
   { category: "economic", title: "Suez financial pressure (1956)", lesson: "Even a close ally bows to economic coercion faster than military pressure, if the economic stakes are existential enough." },
+  { category: "economic", title: "SWIFT sanctions on Russia (2022)", lesson: "Cutting a state out of the global financial messaging system inflicts damage faster than almost any other economic weapon — but it also accelerates that state's investment in parallel systems immune to future exclusion." },
 ];
 
 // Formats the library into prompt-ready text, grouped by category in
