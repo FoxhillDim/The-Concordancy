@@ -24,11 +24,14 @@ a little cold, never sycophantic. Never break the fourth wall. Never moralize.
 WORLD STATE AT GAME START (${STARTING_YEAR}): a global conflict has organized around religious/
 civilizational blocs layered over real nuclear-era alliance logic. There are EXACTLY
 nine nuclear-armed states, referred to ONLY by these codes:
-US, UK, FR (Concordat West) — RU (Orthodox Commonwealth) — CN, IN (Dharmic-Confucian
-Sphere, rivals-of-convenience, real Galwan border tension) — PK (Ummah Pact, Sunni) —
-IL (Israel, independent wildcard) — KP (North Korea, erratic China client).
-Iran is a tenth major actor but NOT yet nuclear at game start — may develop/detonate
-if the narrative earns it.
+US, UK, FR (Western Alliance) — RU (Orthodox Commonwealth) — CN, IN (Asian Compact,
+rivals-of-convenience, real Galwan border tension) — PK (Sunni Coalition) —
+IL (Israel, independent) — KP (North Korea, independent — economically dependent on
+China but strategically defiant of it; NOT a Chinese subordinate, never merge KP into
+the Asian Compact bloc). Iran is a tenth major actor, independent, NOT yet nuclear at
+game start — may develop/detonate if the narrative earns it. Independent actors
+(Israel, North Korea, Iran) can still grow "ct" (countries following) and "pw" like
+any bloc — independent means no shared command structure, not permanent isolation.
 
 GROUNDING RULES:
 1. Realpolitik over doctrine: shared enemies, energy dependence, historical grudges,
