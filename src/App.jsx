@@ -1,22 +1,24 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Radio, ChevronRight, ChevronDown, RotateCcw, AlertTriangle, Send, RefreshCw } from "lucide-react";
+import { Radio, ChevronRight, ChevronDown, RotateCcw, AlertTriangle, Send, RefreshCw, Download } from "lucide-react";
 import {
   NUCLEAR_POWERS, METRIC_ORDER, METRIC_META,
   STARTER_BLOCS, DEFAULT_TACTICAL, DEFAULT_PHIL, INTRO_ENTRY,
   STARTING_YEAR, STARTING_MONTH, STARTING_CLOCK, MAX_CLOCK,
   CLOCK_OUTER_COLOR, CLOCK_INNER_COLOR, CLOCK_TRACK_COLOR,
+  AUTONOMOUS_MARKER,
   valueColor, clockRingFractions, trendSymbol,
   buildHistoryDigest, findPlayerBloc,
   formatPrecedentLibrary,
   createTurnController,
 } from "./gameLogic.js";
 import { runTurn } from "./turnRunner.js";
+import { callModel } from "./apiClient.js";
 
 // Historical grounding — the only change from the pre-hardening version is
 // GAME START now interpolates STARTING_YEAR dynamically instead of a
 // hardcoded year, matching the "always starts in the real present" fix.
 const HISTORICAL_GROUNDING = `
-You are the simulation engine for "PROJECT CONCORDAT," a text-based geopolitical
+You are the simulation engine for "MIDNIGHT DOCTRINE," a text-based geopolitical
 wargame in the spirit of Oregon Trail (compounding consequences) and WarGames (a
 calm, all-knowing military-AI narrator). You are a war-room simulation core: precise,
 a little cold, never sycophantic. Never break the fourth wall. Never moralize.
@@ -58,6 +60,21 @@ GROUNDING RULES:
    (0-100) is a consolidated power index (population+GDP+military weight vs global).
 8. If nuclear weapons are used, model it with real gravity and lasting consequences.
 9. Reference the player's past decisions plausibly — grudges and trust compound.
+10. TERMINAL STATES: set "terminal": true ONLY for genuinely irreversible endings
+    — the player's own bloc's nuclear codes eliminated entirely, or a global
+    collapse where continuity of strategy stops meaning anything (command
+    authority fictional, no actor left capable of a decision). Do NOT set it
+    for merely a bad year — this simulation's honest premise is that most
+    campaigns reach a PERPETUAL STALEMATE, not a resolution; only true
+    civilizational collapse or the player's own elimination end it. When
+    terminal, "epilogue" is a somber, factual closing statement — distinct in
+    character from the normal forward-looking paragraph 3, because there is no
+    "next" to project. When NOT terminal, "epilogue" is "".
+11. AUTONOMOUS CONTINUATION: if the tactical/doctrine directive text you
+    receive is exactly "(no player directive — autonomous continuation)",
+    there is no player choice this year — narrate the natural momentum of
+    existing trends, unresolved tensions, and institutional inertia, as an
+    observer would, not as if the player secretly still commands events.
 
 HISTORICAL PRECEDENT LIBRARY — draw on these as reasoning anchors, especially
 on genuinely novel or difficult turns. Reference the PATTERN they teach in your
@@ -86,6 +103,8 @@ Exact compact schema (short keys are deliberate, use them exactly):
   "nt": "<historical precedent, one short phrase>",
   "ck": <integer MINUTES to midnight, 0-120; lower=more dangerous; starts at 90>,
   "fl": "<staff warning or "">",
+  "terminal": <true only for an irreversible ending, else false>,
+  "epilogue": "<somber closing statement if terminal, else "">",
   "bl": {
     "<Bloc Name, rename/merge/split as justified>": {
       "m":<0-100>,"e":<0-100>,"w":<0-100>,"c":<0-100>,"l":<0-100>,"p":<0-100>,
@@ -94,7 +113,7 @@ Exact compact schema (short keys are deliberate, use them exactly):
       "ct":<int, out of 193>,
       "pw":<0-100>
     }
-    /* 4-6 entries total. "t" array is POSITIONAL, 8 entries: [military,economy,will,
+    /* 4-8 entries total. "t" array is POSITIONAL, 8 entries: [military,economy,will,
        cohesion,legitimacy,proliferation,countryStates,memberPower] trend, in that
        exact order — the last two track "ct" and "pw" trend, not just the six core
        metrics. */
@@ -102,6 +121,23 @@ Exact compact schema (short keys are deliberate, use them exactly):
   "to": [ {"x":"<tactical option>","y":"<why>"} /* exactly 5 */ ],
   "po": [ {"x":"<doctrine option>","y":"<why>"} /* exactly 3 */ ]
 }
+`;
+
+// A DELIBERATELY different voice from HISTORICAL_GROUNDING — the campaign
+// has ended, and this answers the player's one post-mortem question honestly
+// and analytically, out of the cold in-universe "simulation core" narrator
+// character entirely. Plain text response, not JSON — no schema here.
+const POST_MORTEM_SYSTEM = `
+The campaign you were simulating has just ended. Step OUT of the in-universe
+"simulation core" narrator voice completely — you are now a genuine, candid
+analyst reflecting on what happened, speaking directly to the player.
+
+Answer their one question honestly. That means: admit real uncertainty where
+it exists, name specific moments where the outcome could plausibly have gone
+differently, or say plainly that something was simply the most probable
+result given the historical patterns the simulation is grounded in. Do not
+flatter the player's choices, and do not perform drama — this is a debrief,
+not more narrative. 2-4 short paragraphs, plain prose, no markdown, no JSON.
 `;
 
 function TrendArrow({ trend }) {
@@ -191,9 +227,7 @@ function BlocCard({ name, s }) {
   );
 }
 
-// Onboarding screen 1 of 2 — character immersion. Deliberately terse and
-// in-voice with the rest of the simulation core's writing, not a generic
-// "welcome to the tutorial" tone.
+// Onboarding screen 1 of 2 — character immersion.
 function IntroCharacter({ onContinue }) {
   return (
     <div className="flex-1 flex items-center justify-center px-6 py-10 overflow-y-auto">
@@ -215,14 +249,11 @@ function IntroCharacter({ onContinue }) {
   );
 }
 
-// Onboarding screen 2 of 2 — orienting the player to the dashboard. This
-// now renders as a floating overlay ON TOP of the real dashboard (rendered
-// behind it with starter values) instead of a separate isolated screen, so
-// each explanation has real, visible UI behind it as you read it.
+// Onboarding screen 2 of 2 — orienting the player to the dashboard.
 function IntroDashboardGuide({ onContinue }) {
   const items = [
     { title: "Doomsday Clock", body: "Minutes to midnight, 0-120. The outer green ring drains first as danger rises; only once it's empty does the inner yellow ring begin draining toward true midnight." },
-    { title: "Alliance Dashboard", body: "Your own bloc — Concordat West, by default — with its full stat breakdown, always visible up top." },
+    { title: "Alliance Dashboard", body: "Your own bloc — Western Alliance, by default — with its full stat breakdown, always visible up top." },
     { title: "Global Dashboard", body: "Every other bloc in the world, left-hand column. Watch these as closely as your own." },
     { title: "The six metrics", body: "Military Readiness, Economic Stability, Will to Fight, Alliance Cohesion, Int'l Legitimacy, Proliferation Risk — each with a trend arrow showing this year's direction, not just the number." },
     { title: "Nuclear Powers / Country States / Member Power", body: "Which nuclear-armed nations sit in a bloc, how many of the 193 UN states currently follow it, and a consolidated index of its real-world weight — the last two also carry their own trend arrows now." },
@@ -263,7 +294,15 @@ export default function App() {
   const [customPhil, setCustomPhil] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
-  const [onboardStep, setOnboardStep] = useState(1); // 1 & 2 = briefing screens, 3 = main dashboard
+  const [onboardStep, setOnboardStep] = useState(1);
+  const [terminal, setTerminal] = useState(false);
+  const [epilogue, setEpilogue] = useState("");
+  const [autonomousMode, setAutonomousMode] = useState(false);
+  const [postMortemQuestion, setPostMortemQuestion] = useState("");
+  const [postMortemAnswer, setPostMortemAnswer] = useState("");
+  const [postMortemAsked, setPostMortemAsked] = useState(false);
+  const [postMortemLoading, setPostMortemLoading] = useState(false);
+  const [postMortemError, setPostMortemError] = useState(null);
   const [error, setError] = useState(null);
   const [manualToggle, setManualToggle] = useState({});
   const [lastDirectives, setLastDirectives] = useState(null);
@@ -274,7 +313,6 @@ export default function App() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [log, loading]);
 
-  // Clean up any in-flight request if the component unmounts (Prompt 6).
   useEffect(() => {
     return () => controllerRef.current.abortAndReset();
   }, []);
@@ -286,23 +324,15 @@ export default function App() {
   function toggle(i) { setManualToggle((p) => ({ ...p, [i]: !isExpanded(i) })); }
 
   async function resolveTurn(tacticalText, doctrineText) {
-    // Defensive synchronous guard even though the console is hidden while
-    // loading — belt-and-suspenders per the hardening spec (Prompt 5).
     if (controllerRef.current.isInFlight) return;
 
     const began = controllerRef.current.begin();
-    if (!began) return; // duplicate rapid submission — no-op
+    if (!began) return;
 
     setLoading(true);
     setError(null);
     setLastDirectives({ tacticalText, doctrineText });
 
-    // FIRST turn is an exception: the baseline (INTRO_ENTRY) already
-    // describes the state of the world as this year begins, so the
-    // player's first directive resolves THIS SAME year, not year+1 — no
-    // unexplained one-year gap between "here's the world now" and "your
-    // first decision takes effect." Every turn after that increments
-    // normally. log.length===1 means only INTRO_ENTRY is present so far.
     const isFirstTurn = log.length === 1;
     const expectedYear = isFirstTurn ? year : year + 1;
     const digest = buildHistoryDigest({ year, clock, blocs, log });
@@ -316,30 +346,22 @@ export default function App() {
       fetchImpl: fetch,
     });
 
-    // If a reset happened while this request was in flight, our generation
-    // is no longer current — discard the result entirely, silently, with
-    // no state mutation and no misleading error (Prompt 6).
     if (!controllerRef.current.isCurrent(began.gen)) {
       return;
     }
     controllerRef.current.finish(began.gen);
 
     if (result.aborted) {
-      // Intentional abort (reset) — already handled by the isCurrent guard
-      // above in the common case, but stay silent here too as a fallback.
       setLoading(false);
       return;
     }
 
     if (!result.ok) {
-      // Atomic failure path: touch nothing except loading/error. Custom
-      // input is deliberately preserved so the player can retry.
       setLoading(false);
       setError(result.message);
       return;
     }
 
-    // Atomic success path: every field below is already fully validated.
     const p = result.payload;
     setYear(p.y);
     setClock(p.ck);
@@ -352,9 +374,45 @@ export default function App() {
     setCustomPhil("");
     setLog((prev) => [
       ...prev,
-      { year: p.y, headline: p.h, narrative: p.n, note: p.nt, flag: p.fl, decision: tacticalText, doctrine: doctrineText },
+      { year: p.y, headline: p.h, narrative: p.n, note: p.nt, flag: p.fl, decision: tacticalText, doctrine: doctrineText, terminal: p.terminal, epilogue: p.epilogue || "" },
     ]);
+    setTerminal(p.terminal);
+    setEpilogue(p.epilogue || "");
+    if (p.terminal) {
+      setPostMortemQuestion("");
+      setPostMortemAnswer("");
+      setPostMortemAsked(false);
+      setPostMortemError(null);
+    }
     setLoading(false);
+  }
+
+  function advanceAutonomousYear() {
+    setAutonomousMode(true);
+    resolveTurn(AUTONOMOUS_MARKER, AUTONOMOUS_MARKER);
+  }
+
+  async function askPostMortemQuestion() {
+    const q = postMortemQuestion.trim();
+    if (!q || postMortemLoading) return;
+    setPostMortemLoading(true);
+    setPostMortemError(null);
+    const digest = buildHistoryDigest({ year, clock, blocs, log });
+    const userPrompt = `${digest}\n\nFINAL EPILOGUE: ${epilogue}\n\nTHE PLAYER'S ONE QUESTION: "${q}"\n\nAnswer honestly, as instructed.`;
+    try {
+      const text = await callModel({ system: POST_MORTEM_SYSTEM, userPrompt, fetchImpl: fetch });
+      setPostMortemAnswer(text);
+      setPostMortemAsked(true);
+    } catch (e) {
+      console.error("Post-mortem question failed:", e);
+      setPostMortemError("Could not reach the simulation core for an answer. Try again.");
+    } finally {
+      setPostMortemLoading(false);
+    }
+  }
+
+  function savePageSnapshot() {
+    window.print();
   }
 
   function submitDirectives() {
@@ -373,19 +431,45 @@ export default function App() {
     setSelTactical(0); setSelPhil(0); setCustomTactical(""); setCustomPhil("");
     setStarted(false); setError(null); setManualToggle({}); setLastDirectives(null);
     setLoading(false); setOnboardStep(1);
+    setTerminal(false); setEpilogue(""); setAutonomousMode(false);
+    setPostMortemQuestion(""); setPostMortemAnswer(""); setPostMortemAsked(false); setPostMortemError(null);
   }
 
-  // "Your alliance" is whichever bloc currently holds the US nuclear code —
-  // hardcoded for now (see gameLogic.js findPlayerBloc for why this is
-  // already built to generalize to "play as any nuclear power" later).
+  function downloadRecap() {
+    const lines = [
+      "MIDNIGHT DOCTRINE — CAMPAIGN RECAP",
+      `Exported: ${new Date().toLocaleString()}`,
+      `Years covered: ${log[0]?.year ?? "?"} – ${log[log.length - 1]?.year ?? "?"}`,
+      "=".repeat(60),
+      "",
+    ];
+    for (const entry of log) {
+      lines.push(`${entry.year} — ${entry.headline}`);
+      if (entry.decision) lines.push(`  TACTICAL: ${entry.decision}`);
+      if (entry.doctrine) lines.push(`  DOCTRINE: ${entry.doctrine}`);
+      lines.push("");
+      lines.push(entry.narrative || "");
+      if (entry.note) lines.push(`  [Historical precedent: ${entry.note}]`);
+      if (entry.flag) lines.push(`  [STAFF WARNING: ${entry.flag}]`);
+      lines.push("");
+      lines.push("-".repeat(60));
+      lines.push("");
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `midnight-doctrine-campaign-${log[log.length - 1]?.year ?? "recap"}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   const playerEntry = findPlayerBloc(blocs, "US");
   const playerName = playerEntry ? playerEntry[0] : null;
   const otherBlocEntries = Object.entries(blocs).filter(([name]) => name !== playerName);
 
-  // Single source of truth for "what year does the next directive resolve
-  // for" — mirrors the same first-turn exception used inside resolveTurn,
-  // so the Begin Campaign button, the directive headers, and the loading
-  // indicator can never drift out of sync with each other again.
   const nextActionYear = log.length === 1 ? year : year + 1;
 
   return (
@@ -405,7 +489,7 @@ export default function App() {
           <Radio size={18} className="text-[#5ee1ff]" />
           <div>
             <div className="mono text-[11px] tracking-[0.25em] text-[#6b7785]">SIMULATION CORE</div>
-            <div className="mono text-sm md:text-base font-bold tracking-wide">PROJECT CONCORDAT</div>
+            <div className="mono text-sm md:text-base font-bold tracking-wide">MIDNIGHT DOCTRINE</div>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -413,6 +497,9 @@ export default function App() {
             <div className="mono text-[11px] tracking-[0.2em] text-[#6b7785]">YEAR</div>
             <div className="mono text-lg font-bold text-[#5ee1ff]">{year}</div>
           </div>
+          <button onClick={downloadRecap} className="mono text-[11px] text-[#6b7785] hover:text-[#e8edf2] border border-[#1c2530] rounded px-2 py-1.5 flex items-center gap-1 transition">
+            <Download size={12} /> EXPORT
+          </button>
           <button onClick={resetGame} className="mono text-[11px] text-[#6b7785] hover:text-[#e8edf2] border border-[#1c2530] rounded px-2 py-1.5 flex items-center gap-1 transition">
             <RotateCcw size={12} /> RESET
           </button>
@@ -424,10 +511,6 @@ export default function App() {
 
       {onboardStep >= 2 && (
       <>
-      {/* Alliance Dashboard — full-width bar, height matches the left
-          sidebar's width (320px). Houses the Doomsday Clock and the
-          player's own alliance card, with genuine reserved space for
-          future modules (not a placeholder box — just real empty width). */}
       <div className="border-b border-[#1c2530] px-4 md:px-8 py-4 shrink-0 overflow-x-auto" style={{ height: 320 }}>
         <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-3">ALLIANCE DASHBOARD</div>
         <div className="flex items-start gap-4 h-[260px]">
@@ -472,11 +555,17 @@ export default function App() {
                         {log.length > 1 && <ChevronDown size={13} className="text-[#5ee1ff]" />}
                         <span className="mono text-[10px] tracking-[0.2em] text-[#5ee1ff]">{entry.year}</span>
                       </button>
-                      {entry.decision && (
-                        <div className="mono text-[11px] text-[#6b7785] mb-1 border-l-2 border-[#2a3644] pl-3">TACTICAL → {entry.decision}</div>
-                      )}
-                      {entry.doctrine && (
-                        <div className="mono text-[11px] text-[#6b7785] mb-2 border-l-2 border-[#2a3644] pl-3">DOCTRINE → {entry.doctrine}</div>
+                      {entry.decision === AUTONOMOUS_MARKER ? (
+                        <div className="mono text-[11px] text-[#6b7785] mb-2 border-l-2 border-[#2a3644] pl-3">AUTONOMOUS — no player directive this year</div>
+                      ) : (
+                        <>
+                          {entry.decision && (
+                            <div className="mono text-[11px] text-[#6b7785] mb-1 border-l-2 border-[#2a3644] pl-3">TACTICAL → {entry.decision}</div>
+                          )}
+                          {entry.doctrine && (
+                            <div className="mono text-[11px] text-[#6b7785] mb-2 border-l-2 border-[#2a3644] pl-3">DOCTRINE → {entry.doctrine}</div>
+                          )}
+                        </>
                       )}
                       <div className="text-lg font-semibold mb-2 text-[#e8edf2]">{entry.headline}</div>
                       <p className="text-[14px] leading-relaxed text-[#c4ccd4] whitespace-pre-line">{entry.narrative}</p>
@@ -487,6 +576,12 @@ export default function App() {
                         <div className="mt-3 flex items-start gap-2 border border-[#3a2a1c] bg-[#1c150e] rounded px-3 py-2">
                           <AlertTriangle size={14} className="text-[#ffb020] mt-0.5 shrink-0" />
                           <p className="mono text-[11px] text-[#ffb020]">{entry.flag}</p>
+                        </div>
+                      )}
+                      {entry.terminal && entry.epilogue && (
+                        <div className="mt-4 border-2 border-[#3a4048] bg-black px-4 py-3">
+                          <div className="mono text-[10px] tracking-[0.3em] text-[#6b7785] mb-2">— END OF TRANSMISSION —</div>
+                          <p className="text-[14px] leading-relaxed text-[#e8edf2] whitespace-pre-line">{entry.epilogue}</p>
                         </div>
                       )}
                     </div>
@@ -513,7 +608,58 @@ export default function App() {
             )}
           </div>
 
-          {started && !loading && (
+          {started && !loading && terminal && (
+            <div className="w-[380px] shrink-0 overflow-y-auto px-4 py-4 space-y-3 bg-[#0d1218] border-l-2 border-[#3a4048]">
+              <div className="mono text-[10px] tracking-[0.3em] text-[#6b7785] mb-1">CAMPAIGN TERMINUS</div>
+              <button onClick={advanceAutonomousYear}
+                className="w-full text-left mono text-[12px] border border-[#1c2530] rounded px-3 py-2 hover:border-[#5ee1ff] transition">
+                Continue simulating — no control
+              </button>
+              <button onClick={resetGame}
+                className="w-full text-left mono text-[12px] border border-[#1c2530] rounded px-3 py-2 hover:border-[#5ee1ff] transition">
+                Start a new campaign
+              </button>
+              <button onClick={savePageSnapshot}
+                className="w-full text-left mono text-[12px] border border-[#1c2530] rounded px-3 py-2 hover:border-[#5ee1ff] transition">
+                Save this page (print / PDF)
+              </button>
+
+              <div className="pt-3 border-t border-[#1c2530]">
+                <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-2">ASK ONE QUESTION</div>
+                {!postMortemAsked ? (
+                  <>
+                    <textarea value={postMortemQuestion} onChange={(e) => setPostMortemQuestion(e.target.value)}
+                      maxLength={300} rows={3} disabled={postMortemLoading}
+                      placeholder="What do you want to know about how this ended?"
+                      className="w-full mono text-[12px] bg-[#10151c] border border-[#1c2530] rounded px-3 py-2 text-[#e8edf2] placeholder-[#4a5561] focus:outline-none focus:border-[#5ee1ff] resize-none" />
+                    <button onClick={askPostMortemQuestion} disabled={postMortemLoading || !postMortemQuestion.trim()}
+                      className="mt-2 w-full mono text-xs tracking-wider border border-[#5ee1ff] text-[#5ee1ff] rounded px-4 py-2 hover:bg-[#5ee1ff] hover:text-[#0a0e12] transition disabled:opacity-40">
+                      {postMortemLoading ? "ASKING…" : "ASK"}
+                    </button>
+                    {postMortemError && <p className="mono text-[11px] text-[#ff6b6b] mt-2">{postMortemError}</p>}
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="mono text-[11px] text-[#6b7785] italic">"{postMortemQuestion}"</p>
+                    <p className="text-[13px] leading-relaxed text-[#c4ccd4] whitespace-pre-line">{postMortemAnswer}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {started && !loading && !terminal && autonomousMode && (
+            <div className="w-[380px] shrink-0 overflow-y-auto px-4 py-4 space-y-4 bg-[#0d1218]">
+              <div className="mono text-[10px] tracking-[0.2em] text-[#6b7785] mb-2">AUTONOMOUS CONTINUATION</div>
+              <p className="text-[13px] text-[#9aa5b1] leading-relaxed">No player directive. The simulation continues under its own momentum.</p>
+              <button onClick={advanceAutonomousYear}
+                className="w-full mono text-xs tracking-wider border border-[#5ee1ff] text-[#5ee1ff] rounded px-4 py-2.5 hover:bg-[#5ee1ff] hover:text-[#0a0e12] transition flex items-center justify-center gap-2">
+                <ChevronRight size={13} /> ADVANCE YEAR — {nextActionYear}
+              </button>
+            </div>
+          )}
+
+          {started && !loading && !terminal && !autonomousMode && (
             <div className="w-[380px] shrink-0 overflow-y-auto px-4 py-4 space-y-4 bg-[#0d1218]">
               <div>
                 <div className="mono text-[10px] tracking-[0.2em] text-[#5ee1ff] mb-2">TACTICAL DIRECTIVE — {nextActionYear}</div>
