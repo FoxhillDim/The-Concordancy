@@ -36,7 +36,7 @@ export const METRIC_META = {
 export const LEGAL_TRENDS = ["u", "d", "uu", "dd", "f"];
 
 export function flatTrend() {
-return ["f", "f", "f", "f", "f", "f", "f", "f"]; // 8: 6 core metrics + ct + pw
+  return ["f", "f", "f", "f", "f", "f", "f", "f"]; // 8: 6 core metrics + ct + pw
 }
 
 export const STARTER_BLOCS = {
@@ -107,6 +107,13 @@ export const MAX_CLOCK = 120;
 export const CLOCK_SPLIT = 60;
 export const STARTING_CLOCK = 90;
 
+// Marker text sent as the "directive" when the player chooses to continue
+// simulating with no control (post-terminal autonomous mode). The system
+// prompt is instructed to recognize this exact string and narrate the
+// world's own momentum rather than inventing a player action. Also used
+// client-side to render autonomous turns distinctly in the log.
+export const AUTONOMOUS_MARKER = "(no player directive — autonomous continuation)";
+
 export const INTRO_ENTRY = {
   year: STARTING_YEAR,
   headline: "The Fault Lines Set",
@@ -161,14 +168,6 @@ export function trendSymbol(trend) {
 
 // ---------------------------------------------------------------------------
 // JSON extraction (Prompt 2)
-//
-// Tolerates: plain JSON, ```json fences, generic ``` fences, short
-// accidental preamble/postamble text, surrounding whitespace.
-// Rejects: empty output, no JSON object found, truncated JSON, mismatched
-// braces, malformed JSON, top-level arrays.
-//
-// Brace-matching is quote-aware so braces inside JSON string values don't
-// terminate the scan early.
 // ---------------------------------------------------------------------------
 export class ParseError extends Error {
   constructor(message) {
@@ -183,8 +182,6 @@ function stripFences(text) {
   return text;
 }
 
-// Scans for the first balanced {...} object, respecting string literals and
-// escape sequences so braces inside quoted strings are ignored.
 function extractFirstJsonObject(text) {
   const start = text.indexOf("{");
   if (start === -1) return null;
@@ -219,7 +216,6 @@ function extractFirstJsonObject(text) {
       }
     }
   }
-  // Ran off the end without closing — truncated.
   return null;
 }
 
@@ -249,13 +245,6 @@ export function parseModelJson(rawText) {
   return parsed;
 }
 
-// ---------------------------------------------------------------------------
-// Turn payload validation (Prompt 3)
-//
-// Adapted to the CURRENT compact schema: y/h/n/nt/ck/fl/bl/to/po, positional
-// trend arrays, nu/ct/pw per bloc, and TWO option arrays (5 tactical + 3
-// doctrine) instead of the older single 3-item array.
-// ---------------------------------------------------------------------------
 export class ValidationError extends Error {
   constructor(errors) {
     super(errors.join("; "));
@@ -277,7 +266,7 @@ function validateBlocs(bl, errors) {
     return;
   }
   const names = Object.keys(bl);
-if (names.length < 4 || names.length > 8) {
+  if (names.length < 4 || names.length > 8) {
     errors.push(`bl: must contain 4-8 entries, got ${names.length}`);
   }
   for (const name of names) {
@@ -296,8 +285,8 @@ if (names.length < 4 || names.length > 8) {
         errors.push(`bl["${name}"].${k}: must be an integer 0-100, got ${JSON.stringify(v)}`);
       }
     }
-if (!Array.isArray(s.t) || s.t.length !== 8) {
-errors.push(`bl["${name}"].t: must be an 8-element array`);
+    if (!Array.isArray(s.t) || s.t.length !== 8) {
+      errors.push(`bl["${name}"].t: must be an 8-element array`);
     } else {
       s.t.forEach((code, idx) => {
         if (!LEGAL_TRENDS.includes(code)) {
@@ -323,6 +312,25 @@ errors.push(`bl["${name}"].t: must be an 8-element array`);
   }
 }
 
+function validateNuclearInvariant(bl, errors) {
+  const owners = {};
+  for (const [name, s] of Object.entries(bl)) {
+    if (!s || !Array.isArray(s.nu)) continue;
+    for (const code of s.nu) {
+      if (!NUCLEAR_CODES.includes(code)) continue;
+      (owners[code] = owners[code] || []).push(name);
+    }
+  }
+  for (const code of NUCLEAR_CODES) {
+    const found = owners[code] || [];
+    if (found.length === 0) {
+      errors.push(`nuclear invariant: "${code}" is missing from every bloc — must appear in exactly one`);
+    } else if (found.length > 1) {
+      errors.push(`nuclear invariant: "${code}" appears in multiple blocs (${found.join(", ")}) — must appear in exactly one`);
+    }
+  }
+}
+
 function validateOptionArray(arr, expectedLen, field, errors) {
   if (!Array.isArray(arr) || arr.length !== expectedLen) {
     errors.push(`${field}: must be an array of exactly ${expectedLen} items`);
@@ -338,7 +346,6 @@ function validateOptionArray(arr, expectedLen, field, errors) {
   });
 }
 
-// Returns the validated/normalized payload on success, or throws ValidationError.
 export function validateTurnPayload(payload, expectedYear) {
   const errors = [];
 
@@ -357,11 +364,23 @@ export function validateTurnPayload(payload, expectedYear) {
   if (!isNonEmptyString(payload.nt)) errors.push("nt (note): must not be blank");
   if (typeof payload.fl !== "string") errors.push("fl (flag): must be a string (may be empty)");
 
-if (!isFiniteInt(payload.ck) || payload.ck < 0 || payload.ck > MAX_CLOCK) {
+  if (typeof payload.terminal !== "boolean") {
+    errors.push(`terminal: must be a boolean, got ${JSON.stringify(payload.terminal)}`);
+  }
+  if (typeof payload.epilogue !== "string") {
+    errors.push("epilogue: must be a string (may be empty)");
+  } else if (payload.terminal === true && payload.epilogue.trim().length === 0) {
+    errors.push("epilogue: must not be blank when terminal is true");
+  }
+
+  if (!isFiniteInt(payload.ck) || payload.ck < 0 || payload.ck > MAX_CLOCK) {
     errors.push(`ck (clock): must be an integer 0-${MAX_CLOCK}, got ${JSON.stringify(payload.ck)}`);
   }
 
   validateBlocs(payload.bl, errors);
+  if (payload.bl && typeof payload.bl === "object" && !Array.isArray(payload.bl)) {
+    validateNuclearInvariant(payload.bl, errors);
+  }
   validateOptionArray(payload.to, 5, "to", errors);
   validateOptionArray(payload.po, 3, "po", errors);
 
@@ -370,6 +389,19 @@ if (!isFiniteInt(payload.ck) || payload.ck < 0 || payload.ck > MAX_CLOCK) {
   }
 
   return payload;
+}
+
+// ---------------------------------------------------------------------------
+// History digest — full campaign, not just the last few turns.
+// ---------------------------------------------------------------------------
+export function findPlayerBloc(blocs, code = "US") {
+  if (!blocs || typeof blocs !== "object") return null;
+  for (const [name, stats] of Object.entries(blocs)) {
+    if (stats && Array.isArray(stats.nu) && stats.nu.includes(code)) {
+      return [name, stats];
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,8 +415,7 @@ if (!isFiniteInt(payload.ck) || payload.ck < 0 || payload.ck > MAX_CLOCK) {
 //
 // TO ADD MORE LATER: append an object to HISTORICAL_PRECEDENTS with a
 // category from PRECEDENT_CATEGORY_ORDER, a short title, and a one-to-two
-// sentence PARAPHRASED lesson (never a direct quote — always paraphrase,
-// same discipline as everywhere else in this app).
+// sentence PARAPHRASED lesson (never a direct quote — always paraphrase).
 // ---------------------------------------------------------------------------
 export const PRECEDENT_CATEGORY_ORDER = ["alliance", "insurgency", "nuclear", "diplomacy", "economic"];
 export const PRECEDENT_CATEGORY_LABELS = {
@@ -396,7 +427,6 @@ export const PRECEDENT_CATEGORY_LABELS = {
 };
 
 export const HISTORICAL_PRECEDENTS = [
-  // -- alliance formation / betrayal --
   { category: "alliance", title: "NATO's founding (1949)", lesson: "Alliances form fastest around one clear, immediate shared threat, not shared identity. A mutual-defense promise rarely tested holds; one tested often and inconsistently erodes fast." },
   { category: "alliance", title: "Molotov-Ribbentrop Pact (1939)", lesson: "Ideological enemies will ally short-term if it buys strategic room. Everyone reads such pacts as temporary — betrayal is expected the moment either side gains enough advantage to act on it." },
   { category: "alliance", title: "Sino-Soviet split (1960s)", lesson: "Shared ideology doesn't guarantee alliance stability. Border disputes and leadership rivalry fractured a supposedly unified bloc within a single generation." },
@@ -409,7 +439,6 @@ export const HISTORICAL_PRECEDENTS = [
   { category: "alliance", title: "Congress of Vienna (1815)", lesson: "After Napoleon, the victors deliberately restored a balance of power rather than punishing France into permanent weakness, producing roughly 40 years without a general European war. Settlements that avoid humiliating the defeated side tend to outlast ones that don't." },
   { category: "alliance", title: "Diplomatic Revolution of 1756", lesson: "France and Austria, enemies for over two centuries, allied virtually overnight once the strategic calculus flipped. Even 'ancient enmity' is negotiable the instant circumstances change enough." },
 
-  // -- insurgency / proxy war --
   { category: "insurgency", title: "Soviet-Afghan War (1979-89)", lesson: "Arming an insurgency can bleed a superpower without direct confrontation — but the weapons and networks created outlive the conflict and become their own future threat." },
   { category: "insurgency", title: "Vietnam War escalation", lesson: "Great powers backing opposite sides in a civil conflict escalate through incremental mission creep, not one decisive choice. Each step is individually justifiable; the sum becomes an unplanned full-scale war." },
   { category: "insurgency", title: "Iran-Contra precedent", lesson: "Covert proxy support that violates a government's own stated policy, once exposed, damages domestic legitimacy far more than the operation's tactical value ever justified." },
@@ -417,8 +446,7 @@ export const HISTORICAL_PRECEDENTS = [
   { category: "insurgency", title: "Korean War (1950)", lesson: "The first Cold War proxy war set the template: a divided state becomes the battlefield, great powers intervene without formally declaring war on each other, and the conflict ends not in victory but an armistice that freezes the division for generations." },
   { category: "insurgency", title: "Syrian Civil War proxy dynamics", lesson: "Multiple outside powers can each back a different faction in the same civil war simultaneously — victory for any single faction becomes nearly impossible once its sponsor's real interest is regional standing, not that faction's actual success." },
   { category: "insurgency", title: "Peninsular War (1808-1814)", lesson: "Spanish guerrilla resistance bled Napoleon's dominant military for six years without ever winning a decisive battle, backed by British support. Occupying a hostile population is expensive even when you win every fight — attrition breaks occupiers, not battlefield losses." },
-  
-  // -- nuclear crisis management --
+
   { category: "nuclear", title: "Cuban Missile Crisis (1962)", lesson: "Private backchannel communication resolved what public brinkmanship could not. A face-saving secret concession let both sides claim victory domestically while avoiding war." },
   { category: "nuclear", title: "Yom Kippur War DEFCON 3 (1973)", lesson: "Superpower nuclear signaling can de-escalate a regional conflict by making the cost of continued involvement clear to both sides — without a shot fired between the superpowers themselves." },
   { category: "nuclear", title: "Able Archer 83", lesson: "A routine military exercise, poorly communicated, can be misread by a paranoid adversary as first-strike preparation. The closest the Cold War came to accidental nuclear war stemmed from ambiguity, not aggression." },
@@ -427,21 +455,17 @@ export const HISTORICAL_PRECEDENTS = [
   { category: "nuclear", title: "Kargil War (1999)", lesson: "Two openly declared nuclear powers fought a real, sustained conventional war within a year of both testing weapons — deterrence caps the ceiling of a conflict, it doesn't prevent conflict from happening at all." },
   { category: "nuclear", title: "JCPOA and its 2018 collapse", lesson: "A negotiated nonproliferation framework can genuinely constrain a weapons program for years — but unilateral withdrawal by one signatory, even without provocation, destroys the credibility of every future framework with that actor." },
 
-  // -- diplomatic breakthroughs --
   { category: "diplomacy", title: "Camp David Accords (1978)", lesson: "A mediator with no direct stake, combined with sustained personal relationship-building between adversarial leaders, can overcome decades of stated hostility faster than institutional diplomacy." },
   { category: "diplomacy", title: "Nixon's China opening (1972)", lesson: "A leader with unimpeachable hardline credentials can make concessions a moderate leader could never survive politically making." },
   { category: "diplomacy", title: "Good Friday Agreement (1998)", lesson: "Ending a protracted conflict often requires formally acknowledging both sides' core grievances at once, not declaring one side's narrative the winner." },
   { category: "diplomacy", title: "Reykjavik Summit (1986)", lesson: "Two superpower leaders came within one unresolved technical dispute of agreeing to abolish nuclear weapons entirely — proof total disarmament has been within reach before, and that it can still collapse over a single sticking point neither side will yield." },
   { category: "diplomacy", title: "Congress of Berlin (1878)", lesson: "The great powers convened specifically to revise a prior treaty judged too favorable to one side and too destabilizing to the regional balance, redrawing borders by committee instead of by further war. When one power's unilateral gains threaten to overturn the wider order, others will often intervene diplomatically to claw the balance back." },
 
-  // -- economic coercion (deliberately thin — secondary to this sim's focus) --
   { category: "economic", title: "1973 Oil Embargo", lesson: "Resource leverage can force policy change faster than military pressure, but it also accelerates the target's long-term effort to become independent of that resource." },
   { category: "economic", title: "Suez financial pressure (1956)", lesson: "Even a close ally bows to economic coercion faster than military pressure, if the economic stakes are existential enough." },
   { category: "economic", title: "SWIFT sanctions on Russia (2022)", lesson: "Cutting a state out of the global financial messaging system inflicts damage faster than almost any other economic weapon — but it also accelerates that state's investment in parallel systems immune to future exclusion." },
 ];
 
-// Formats the library into prompt-ready text, grouped by category in
-// priority order. Pure function, independently testable.
 export function formatPrecedentLibrary(precedents = HISTORICAL_PRECEDENTS) {
   const lines = [];
   for (const cat of PRECEDENT_CATEGORY_ORDER) {
@@ -454,15 +478,6 @@ export function formatPrecedentLibrary(precedents = HISTORICAL_PRECEDENTS) {
     lines.push("");
   }
   return lines.join("\n").trim();
-}
-export function findPlayerBloc(blocs, code = "US") {
-  if (!blocs || typeof blocs !== "object") return null;
-  for (const [name, stats] of Object.entries(blocs)) {
-    if (stats && Array.isArray(stats.nu) && stats.nu.includes(code)) {
-      return [name, stats];
-    }
-  }
-  return null;
 }
 
 export function buildHistoryDigest({ year, clock, blocs, log }) {
@@ -485,48 +500,8 @@ export function buildHistoryDigest({ year, clock, blocs, log }) {
 }
 
 // ---------------------------------------------------------------------------
-// Turn concurrency controller (Prompts 5 & 6) — a plain-JS, React-free
-// module so the duplicate-submission and reset-during-request invariants
-// can be unit tested without DOM/component rendering.
+// Turn concurrency controller
 // ---------------------------------------------------------------------------
 export function createTurnController() {
   let inFlight = false;
-  let generation = 0;
-  let controller = null;
-
-  return {
-    // Call when starting a new turn. Returns null if a turn is already in
-    // flight (caller must no-op). Otherwise returns {signal, gen}.
-    begin() {
-      if (inFlight) return null;
-      inFlight = true;
-      generation += 1;
-      controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-      return { signal: controller ? controller.signal : undefined, gen: generation };
-    },
-    // True if `gen` is still the active request (i.e. not superseded by a
-    // reset or a later begin()).
-    isCurrent(gen) {
-      return inFlight && gen === generation;
-    },
-    // Call in `finally` for the request started with this `gen`. Only
-    // releases the lock if this is still the current generation — a stale
-    // call is a safe no-op.
-    finish(gen) {
-      if (gen === generation) {
-        inFlight = false;
-      }
-    },
-    // Call from resetGame(). Aborts the in-flight fetch (if any) and
-    // invalidates its generation so a late completion is ignored.
-    abortAndReset() {
-      if (controller) controller.abort();
-      generation += 1;
-      inFlight = false;
-      controller = null;
-    },
-    get isInFlight() {
-      return inFlight;
-    },
-  };
-}
+  let generation
