@@ -504,4 +504,33 @@ export function buildHistoryDigest({ year, clock, blocs, log }) {
 // ---------------------------------------------------------------------------
 export function createTurnController() {
   let inFlight = false;
-  let generation
+  let generation = 0;
+  let controller = null;
+
+  return {
+    begin() {
+      if (inFlight) return null;
+      inFlight = true;
+      generation += 1;
+      controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      return { signal: controller ? controller.signal : undefined, gen: generation };
+    },
+    isCurrent(gen) {
+      return inFlight && gen === generation;
+    },
+    finish(gen) {
+      if (gen === generation) {
+        inFlight = false;
+      }
+    },
+    abortAndReset() {
+      if (controller) controller.abort();
+      generation += 1;
+      inFlight = false;
+      controller = null;
+    },
+    get isInFlight() {
+      return inFlight;
+    },
+  };
+}
